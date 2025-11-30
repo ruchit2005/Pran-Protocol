@@ -3,18 +3,22 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const { query, history } = await req.json();
+    const { query, history, session_id } = await req.json();
+    const token = req.headers.get('authorization');
 
-    const pythonApiUrl = `${process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL}/chat`;
+    const backendUrl = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://127.0.0.1:8000';
+    const pythonApiUrl = `${backendUrl}/chat`;
 
     const response = await fetch(pythonApiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': token || ''
       },
       body: JSON.stringify({
-        message: { query },
-        history: history,
+        query,
+        session_id,
+        history: history || [],
       }),
     });
 

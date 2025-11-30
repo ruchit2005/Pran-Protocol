@@ -13,6 +13,21 @@ faiss-cpu>=1.7.4
 rich>=13.0.0
 
 # Environment variables
+# Core dependencies
+langchain>=0.1.0
+langchain-openai>=0.0.5
+langchain-community>=0.0.20
+openai>=1.0.0
+pydantic>=2.0.0
+
+# Search and retrieval
+tavily-python>=0.2.0
+faiss-cpu>=1.7.4
+
+# CLI interface
+rich>=13.0.0
+
+# Environment variables
 python-dotenv>=1.0.0
 
 # Vector Store
@@ -22,3 +37,9 @@ faiss-cpu
 # Embeddings & Models
 sentence-transformers
 tiktoken
+
+# Database & Auth
+sqlalchemy>=2.0.0
+passlib[bcrypt]>=1.7.4
+python-jose[cryptography]>=3.3.0
+python-multipart>=0.0.6

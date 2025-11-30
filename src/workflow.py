@@ -13,6 +13,8 @@ from .chains import (
     AyushChain,
     HospitalLocatorChain
 )
+from .utils.emergency import HybridEmergencyDetector
+from .utils.youtube_client import search_videos
 
 class HealthcareWorkflow:
     """Main workflow orchestrator for hybrid RAG/Search system"""
@@ -24,8 +26,7 @@ class HealthcareWorkflow:
         self.guardrail = GuardrailChain(config.llm)
         self.classifier = IntentClassifierChain(config.llm)
         self.symptom_chain = SymptomCheckerChain(config.llm)
-        
-        # --- THIS IS THE CRITICAL FIX ---
+        self.emergency_detector = HybridEmergencyDetector()
         
         # Agents using WEB SEARCH get config.search_tool
         self.gov_scheme_chain = GovernmentSchemeChain(config.llm, config.search_tool)
@@ -34,11 +35,9 @@ class HealthcareWorkflow:
         
         # Agents using RAG get config.rag_retriever
         self.ayush_chain = AyushChain(config.llm, config.rag_retriever)
-        self.yoga_chain = YogaChain(config.llm, config.rag_retriever) # This was the line causing the error
-        
-        # --- END OF FIX ---
+        self.yoga_chain = YogaChain(config.llm, config.rag_retriever)
 
-    def run(self, user_input: str, query_for_classification: str) -> Dict[str, Any]:
+    async def run(self, user_input: str, query_for_classification: str) -> Dict[str, Any]:
         """Execute the workflow"""
         
         # Step 1: Safety check
@@ -65,12 +64,18 @@ class HealthcareWorkflow:
             result["output"] = self.mental_wellness_chain.run(user_input)
             # Yoga is RAG-based, so it will use the RAG retriever
             result["yoga_recommendations"] = self.yoga_chain.run(user_input)
+            # Add YouTube videos for Yoga
+            try:
+                videos = await search_videos(f"yoga for mental wellness {user_input}")
+                result["yoga_videos"] = videos
+            except Exception as e:
+                print(f"⚠️ Failed to fetch YouTube videos: {e}")
             
         elif intent == "ayush_support":
             result["output"] = self.ayush_chain.run(user_input)
             
         elif intent == "symptom_checker":
-            result.update(self._handle_symptoms(user_input))
+            result.update(await self._handle_symptoms(user_input))
             
         elif intent == "facility_locator_support":
             result["output"] = self.hospital_chain.run(user_input)
@@ -81,16 +86,27 @@ class HealthcareWorkflow:
         print("   ✓ Chain execution complete\n")
         return result
     
-    def _handle_symptoms(self, user_input: str) -> Dict[str, Any]:
+    async def _handle_symptoms(self, user_input: str) -> Dict[str, Any]:
         """Handle symptom checking with multi-agent follow-up"""
-        symptom_data = self.symptom_chain.run(user_input)
-        result = {"symptom_assessment": symptom_data.model_dump()}
+        # 1. Fast Keyword/Regex Check
+        is_emergency, reason = self.emergency_detector.check_emergency(user_input)
         
-        if symptom_data.is_emergency:
-            hospital_query = f"Find nearest emergency hospitals for: {', '.join(symptom_data.symptoms)}"
+        # 2. LLM Assessment (if not already detected)
+        if not is_emergency:
+            symptom_data = self.symptom_chain.run(user_input)
+            is_emergency = symptom_data.is_emergency
+            result = {"symptom_assessment": symptom_data.model_dump()}
+        else:
+            # Create a dummy symptom data object for consistency if needed, or just proceed
+            # For now, we'll just skip the detailed extraction if it's a clear emergency
+            result = {"symptom_assessment": {"is_emergency": True, "symptoms": [reason], "severity": 10}}
+
+        if is_emergency:
+            hospital_query = f"Find nearest emergency hospitals for: {user_input}"
             result["output"] = {
                 "emergency": True,
-                "message": "⚠️ URGENT: Seek immediate medical attention. Call emergency services.",
+                "message": "⚠️ URGENT: Seek immediate medical attention. Call emergency services (108/112).",
+                "reason": reason or "Critical symptoms detected"
             }
             result["hospital_locator"] = self.hospital_chain.run(hospital_query)
         else:
@@ -99,6 +115,14 @@ class HealthcareWorkflow:
             # All follow-up recommendations for symptoms will use the RAG system
             result["ayurveda_recommendations"] = self.ayush_chain.run(f"Provide ayurvedic remedies for: {symptom_text}")
             result["yoga_recommendations"] = self.yoga_chain.run(f"Suggest yoga for: {symptom_text}")
+            
+            # Add YouTube videos for Yoga
+            try:
+                videos = await search_videos(f"yoga for {', '.join(symptom_data.symptoms)}")
+                result["yoga_videos"] = videos
+            except Exception as e:
+                print(f"⚠️ Failed to fetch YouTube videos: {e}")
+
             result["general_guidance"] = self.mental_wellness_chain.run(f"Provide wellness advice for: {symptom_text}")
         
         return result

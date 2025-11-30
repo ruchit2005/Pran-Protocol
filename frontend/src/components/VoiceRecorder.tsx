@@ -29,8 +29,12 @@ export default function VoiceRecorder({ onTranscribed, onError }: Props) {
           const fd = new FormData();
           fd.append("file", blob, "voice.webm");
 
+          const token = localStorage.getItem("token");
           const res = await fetch("/api/chat/voice", {
             method: "POST",
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
             body: fd,
           });
 
@@ -74,11 +78,10 @@ export default function VoiceRecorder({ onTranscribed, onError }: Props) {
   return (
     <button
       onClick={() => (recording ? stopRecording() : startRecording())}
-      className={`p-3 rounded-2xl shadow-lg transition-all ${
-        recording
+      className={`p-3 rounded-2xl shadow-lg transition-all ${recording
           ? "bg-red-500 hover:bg-red-600 text-white"
           : "from-emerald-500 to-cyan-500 bg-gradient-to-r hover:from-emerald-600 hover:to-cyan-600 text-white"
-      }`}
+        }`}
     >
       {recording ? "🛑 Stop" : "🎤 Speak"}
     </button>

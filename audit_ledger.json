@@ -1,0 +1,44 @@
+[
+    {
+        "index": 0,
+        "timestamp": "2025-11-30 13:22:28.486294",
+        "data": {
+            "message": "Genesis Block"
+        },
+        "previous_hash": "0",
+        "hash": "51b68661ab5148362998886c8610c0e0b7a24afda2a81eba63bcdc8db74f6b67"
+    },
+    {
+        "index": 1,
+        "timestamp": "2025-11-30 13:26:03.513134",
+        "data": {
+            "user_id": 1,
+            "action": "SIGNUP",
+            "details": "User registered"
+        },
+        "previous_hash": "51b68661ab5148362998886c8610c0e0b7a24afda2a81eba63bcdc8db74f6b67",
+        "hash": "81cfa854a6ee0561c321e5be9c2c23183069df7eafde049c130924371f537889"
+    },
+    {
+        "index": 2,
+        "timestamp": "2025-11-30 14:15:40.815454",
+        "data": {
+            "user_id": 2,
+            "action": "SIGNUP",
+            "details": "User registered"
+        },
+        "previous_hash": "81cfa854a6ee0561c321e5be9c2c23183069df7eafde049c130924371f537889",
+        "hash": "743c5cc37c9adf98d05d630c200f930746d217418aa3269b44ce849637c42572"
+    },
+    {
+        "index": 3,
+        "timestamp": "2025-11-30 14:16:14.756338",
+        "data": {
+            "user_id": 2,
+            "action": "CHAT_QUERY",
+            "details": "User sent a message"
+        },
+        "previous_hash": "743c5cc37c9adf98d05d630c200f930746d217418aa3269b44ce849637c42572",
+        "hash": "390d22003be37d4fe54d93e013a23c609916a93057327037413fd43f1c0be928"
+    }
+]
