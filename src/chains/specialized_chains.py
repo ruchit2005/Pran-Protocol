@@ -1,10 +1,5 @@
 """
-Specialized chain implementations using RAG retriever - PROPERLY FIXED
-
-THE REAL BUG: LangChain's ChatPromptTemplate needs ALL variables 
-(both {input} and {context}) to be in the template structure.
-
-THE FIX: Use PromptTemplate or include {context} in the messages properly.
+Specialized chain implementations using RAG retriever
 """
 
 import json
@@ -38,7 +33,6 @@ class SearchBasedChain:
         print(f"      ← Response generated")
         return response
 
-# --- FIXED Base Class ---
 class RAGBasedChain:
     """Base class for chains that use our internal RAG retriever"""
     
@@ -70,7 +64,7 @@ class RAGBasedChain:
         
         print(f"      → Generating response with context...")
         
-        # ✅ PROPER FIX: Format the context into the system prompt first
+        # Format the context into the system prompt first
         formatted_system_prompt = self.system_prompt_template.replace("{context}", context)
         
         # Now create the prompt with only {input} variable
@@ -87,7 +81,7 @@ class RAGBasedChain:
         return response
 
 
-# --- Updated Specialized Chains ---
+# --- Specialized Chains ---
 
 class GovernmentSchemeChain(SearchBasedChain):
     def __init__(self, llm, search_tool):
@@ -113,7 +107,6 @@ class HospitalLocatorChain(SearchBasedChain):
         search_query = f"hospitals healthcare facilities near {user_input}"
         return self.search_and_generate(user_input, search_query)
 
-
 class YogaChain(RAGBasedChain):
     """Provides yoga recommendations using RAG"""
     
@@ -124,6 +117,9 @@ Based on the provided context, provide:
 1. Specific yoga poses (asanas) and breathing exercises (pranayama).
 2. Safety precautions and contraindications mentioned in the documents.
 3. Suggested duration and frequency if available in the context.
+
+IMPORTANT: You must cite the source for every recommendation using the format [Source: filename].
+Example: "Practice Tadasana for stability [Source: yoga_basics.pdf]."
 
 Retrieved Context:
 {context}"""
@@ -144,6 +140,9 @@ Based on the retrieved context, provide:
 2. Dietary and lifestyle recommendations.
 3. Any mentioned precautions or contraindications.
 4. Stick strictly to the information provided in the context.
+
+IMPORTANT: You must cite the source for every recommendation using the format [Source: filename].
+Example: "Ashwagandha is good for stress [Source: ayurveda_herbs.txt]."
 
 Retrieved Context:
 {context}"""

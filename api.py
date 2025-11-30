@@ -90,7 +90,7 @@ async def handle_chat(message: ChatMessage, history: List[ChatHistory] = []):
             history_context += f"{i}. User: {msg.query}\n   Intent: {msg.intent}\n"
 
     try:
-        result = workflow.run(
+        result = await workflow.run(
             user_input=message.query,
             query_for_classification=message.query + history_context
         )
@@ -134,7 +134,7 @@ async def chat_voice(file: UploadFile = File(...)):
         print(f"[VOICE INPUT] {text}")
 
         # 3️⃣ Run healthcare workflow
-        result = workflow.run(
+        result = await workflow.run(
             user_input=text,
             query_for_classification=text
         )

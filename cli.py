@@ -84,10 +84,11 @@ class HealthcareCLI:
 
                 print("\n🔍 Running Workflow...\n")
 
-                result = self.workflow.run(
+                import asyncio
+                result = asyncio.run(self.workflow.run(
                     user_input=clean_user_input,
                     query_for_classification=query_for_classification,
-                )
+                ))
 
                 self.history.append({"query": user_input, "result": result})
 

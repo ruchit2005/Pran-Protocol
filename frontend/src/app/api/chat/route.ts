@@ -5,7 +5,8 @@ export async function POST(req: NextRequest) {
   try {
     const { query, history } = await req.json();
 
-    const pythonApiUrl = `${process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL}/chat`;
+    const backendUrl = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://127.0.0.1:8000';
+    const pythonApiUrl = `${backendUrl}/chat`;
 
     const response = await fetch(pythonApiUrl, {
       method: 'POST',
