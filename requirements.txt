@@ -1,45 +1,24 @@
-# Core dependencies
-langchain>=0.1.0
-langchain-openai>=0.0.5
-langchain-community>=0.0.20
-openai>=1.0.0
-pydantic>=2.0.0
-
-# Search and retrieval
-tavily-python>=0.2.0
-faiss-cpu>=1.7.4
-
-# CLI interface
-rich>=13.0.0
-
-# Environment variables
-# Core dependencies
-langchain>=0.1.0
-langchain-openai>=0.0.5
-langchain-community>=0.0.20
-openai>=1.0.0
-pydantic>=2.0.0
-
-# Search and retrieval
-tavily-python>=0.2.0
-faiss-cpu>=1.7.4
-
-# CLI interface
-rich>=13.0.0
-
-# Environment variables
-python-dotenv>=1.0.0
-
-# Vector Store
-chromadb
-faiss-cpu
-
-# Embeddings & Models
-sentence-transformers
-tiktoken
-
-# Database & Auth
-sqlalchemy>=2.0.0
-passlib[bcrypt]>=1.7.4
-python-jose[cryptography]>=3.3.0
-python-multipart>=0.0.6
+fastapi==0.115.12
+uvicorn==0.34.2
+python-multipart==0.0.20
+sqlalchemy==2.0.40
+python-dotenv==1.1.0
+pydantic==2.11.4
+pydantic-settings==2.11.0
+openai==1.109.1
+langchain==0.2.15
+langchain-community==0.2.15
+langchain-core==0.2.43
+langchain-openai==0.1.25
+chromadb==1.2.1
+tiktoken==0.7.0
+tavily-python==0.7.12
+python-jose==3.5.0
+passlib==1.7.4
+bcrypt==4.0.1
+requests==2.32.3
+unstructured==0.15.9
+unstructured-client==0.25.5
+pypdf==4.3.1
+networkx==3.3
+sentence-transformers==2.2.2

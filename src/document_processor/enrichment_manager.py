@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from langchain_community.chat_models import ChatOpenAI
-from langchain.schema import Document
+from langchain_core.documents import Document
 from config.settings import settings
 import logging
 import json

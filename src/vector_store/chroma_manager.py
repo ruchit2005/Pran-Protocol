@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional, Tuple
 import chromadb
 from chromadb.config import Settings as ChromaSettings
-from langchain.schema import Document
+from langchain_core.documents import Document
 from config.settings import settings
 from src.embeddings.embedding_manager import EmbeddingManager
 import logging

@@ -101,7 +101,8 @@ class Settings(BaseSettings):
         
         for init_file in init_files:
             init_file.parent.mkdir(parents=True, exist_ok=True)
-            init_file.touch(exist_ok=True)
+            if not init_file.exists():
+                init_file.touch()
 
 # Global settings instance
 settings = Settings()
