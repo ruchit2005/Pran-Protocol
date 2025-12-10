@@ -85,6 +85,7 @@ class Token(BaseModel):
 class ChatMessage(BaseModel):
     query: str
     session_id: Optional[int] = None
+    generate_audio: bool = False
 
 class SessionCreate(BaseModel):
     title: str
@@ -227,7 +228,47 @@ async def handle_chat(
             query_for_classification=message.query + history_context
         )
         
+        # Generate Audio if requested
+        audio_url = None
+        if message.generate_audio:
+             # Get the assistant output (string-safe)
+            raw_output = result.get("output") if isinstance(result, dict) else result
+            tts_input = raw_output if isinstance(raw_output, str) else str(raw_output)
+            
+            # Generate TTS
+            
+            # Create a simple hash of the text for caching
+            import hashlib
+            text_hash = hashlib.md5(tts_input.encode("utf-8")).hexdigest()
+            filename = f"{text_hash}.mp3"
+            tts_path = os.path.join(AUDIO_DIR, filename)
+            
+            # Check cache first
+            if not os.path.exists(tts_path):
+                logging.info(f"Generating TTS for session {session_id}. Input length: {len(tts_input)}")
+                try:
+                    speech = client.audio.speech.create(
+                        model="tts-1",
+                        voice="alloy",
+                        input=tts_input[:4096], # Limit for safety
+                        response_format="mp3"
+                    )
+                    with open(tts_path, "wb") as f:
+                        f.write(speech.read())
+                    logging.info(f"TTS generated successfully: {filename}")
+                except Exception as e:
+                    logging.error(f"TTS generation failed: {e}", exc_info=True)
+                    # Don't try to continue if generation failed
+                    raise e
+            else:
+                logging.info(f"TTS Cache Hit: {filename}")
+
+            base_url = os.getenv("FRONTEND_BASE_URL", "http://127.0.0.1:8000")
+            audio_url = f"{base_url}/audio/{filename}"
+            result["audio_url"] = audio_url
+
         # Save Assistant Message (store result as string or JSON string)
+        # Note: We might want to store the audio URL in metadata in the future
         assistant_content = str(result.get("output", ""))
         if not assistant_content:
              assistant_content = str(result) # Fallback to full result if output is missing
@@ -244,7 +285,92 @@ async def handle_chat(
 
 
 # -------------------------------------------------------
-# VOICE CHAT ENDPOINT (Protected)
+# TTS ENDPOINT
+# -------------------------------------------------------
+class TTSRequest(BaseModel):
+    text: str
+
+@app.post("/tts")
+async def generate_tts(request: TTSRequest, current_user: User = Depends(get_current_user)):
+    """
+    Generate audio for a given text string.
+    Returns: { audio_url: str }
+    """
+    try:
+        logging.info(f"Generating TTS for user {current_user.email}. Text length: {len(request.text)}")
+        
+        # Simple cache based on text hash
+        import hashlib
+        text_hash = hashlib.md5(request.text.encode("utf-8")).hexdigest()
+        filename = f"{text_hash}.mp3"
+        tts_path = os.path.join(AUDIO_DIR, filename)
+
+        if not os.path.exists(tts_path):
+            speech = client.audio.speech.create(
+                model="tts-1",
+                voice="alloy",
+                input=request.text[:4096], # Limit for safety
+                response_format="mp3"
+            )
+            with open(tts_path, "wb") as f:
+                f.write(speech.read())
+        else:
+             logging.info(f"TTS Cache Hit: {filename}")
+
+        base_url = os.getenv("FRONTEND_BASE_URL", "http://127.0.0.1:8000")
+        audio_url = f"{base_url}/audio/{filename}"
+        
+        return {"audio_url": audio_url}
+
+    except Exception as e:
+        logging.error(f"TTS generation failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+# -------------------------------------------------------
+# TRANSCRIBE ENDPOINT
+# -------------------------------------------------------
+@app.post("/transcribe")
+async def transcribe_audio(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Transcribe uploaded audio file using Whisper.
+    Returns: { text: str, language: str }
+    """
+    try:
+        # 1. Save uploaded audio temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
+            tmp.write(await file.read())
+            audio_path = tmp.name
+
+        # 2. Whisper transcription with verbose response to get language
+        with open(audio_path, "rb") as audio_file:
+            transcription = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                response_format="verbose_json"
+            )
+
+        text = transcription.text.strip()
+        language = getattr(transcription, "language", "en") # verbose_json returns language
+        
+        logging.info(f"Transcription ({language}): {text}")
+
+        # Audit Log (optional for just transcription, or wait until chat)
+        # audit_ledger.add_block(current_user.id, "TRANSCRIPTION", "User transcribed audio")
+        
+        # Cleanup
+        os.unlink(audio_path)
+
+        return {"text": text, "language": language}
+
+    except Exception as e:
+        logging.error(f"Transcription failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+# -------------------------------------------------------
+# VOICE CHAT ENDPOINT (Legacy/Combined)
 # -------------------------------------------------------
 @app.post("/chat/voice")
 async def chat_voice(

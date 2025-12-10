@@ -3,7 +3,7 @@
 import React, { useRef, useState } from "react";
 
 type Props = {
-  onTranscribed: (text: string, assistant?: any) => void;
+  onTranscribed: (text: string, language?: string) => void;
   onError?: (err: string) => void;
 };
 
@@ -30,7 +30,8 @@ export default function VoiceRecorder({ onTranscribed, onError }: Props) {
           fd.append("file", blob, "voice.webm");
 
           const token = localStorage.getItem("token");
-          const res = await fetch("/api/chat/voice", {
+          // Use new decouple endpoint
+          const res = await fetch("/api/transcribe", {
             method: "POST",
             headers: {
               'Authorization': `Bearer ${token}`
@@ -39,22 +40,20 @@ export default function VoiceRecorder({ onTranscribed, onError }: Props) {
           });
 
           if (!res.ok) {
+            if (res.status === 401) {
+              window.location.href = "/login";
+              return;
+            }
             const txt = await res.text();
             onError?.(`Upload error: ${res.status} ${txt}`);
             return;
           }
 
           const json = await res.json();
-          // Expecting: { text, assistant, audio_url }
-          onTranscribed(json.text, json.assistant);
+          // Expecting: { text, language }
+          onTranscribed(json.text, json.language);
 
-          // 🔊 Auto-play TTS if available
-          if (json.audio_url) {
-            const audio = new Audio(json.audio_url);
-            audio.play().catch((err) =>
-              console.error("Audio playback failed:", err)
-            );
-          }
+          // Audio playback logic moved to parent component
         } catch (err: any) {
           onError?.(err?.message || "Upload failed");
         }
@@ -78,12 +77,19 @@ export default function VoiceRecorder({ onTranscribed, onError }: Props) {
   return (
     <button
       onClick={() => (recording ? stopRecording() : startRecording())}
-      className={`p-3 rounded-2xl shadow-lg transition-all ${recording
-          ? "bg-red-500 hover:bg-red-600 text-white"
-          : "from-emerald-500 to-cyan-500 bg-gradient-to-r hover:from-emerald-600 hover:to-cyan-600 text-white"
+      className={`p-3 rounded-full shadow-lg transition-all flex items-center gap-2 ${recording
+        ? "bg-red-500 hover:bg-red-600 text-white animate-pulse"
+        : "bg-white/10 hover:bg-white/20 text-white border border-white/10"
         }`}
     >
-      {recording ? "🛑 Stop" : "🎤 Speak"}
+      {recording ? (
+        <>
+          <div className="w-2 h-2 rounded-full bg-white animate-ping" />
+          <span className="text-sm font-medium">Recording...</span>
+        </>
+      ) : (
+        "🎤"
+      )}
     </button>
   );
 }

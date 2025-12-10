@@ -1,12 +1,14 @@
 "use client";
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Heart, Send, Sparkles, Activity, Loader2, Plus, MessageSquare, LogOut, Menu, X } from 'lucide-react';
+import { Heart, Send, Sparkles, Activity, Loader2, Plus, MessageSquare, LogOut, Menu, X, Volume2, PauseCircle, PlayCircle, XCircle } from 'lucide-react';
 import VoiceRecorder from "./VoiceRecorder";
 
 type Message = {
   role: 'user' | 'assistant';
   content: string | React.ReactNode;
+  rawContent?: string; // For TTS
+  audioUrl?: string;
 };
 
 type Session = {
@@ -101,6 +103,13 @@ export default function HealthcareChat() {
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile sidebar toggle
 
+  // TTS State
+  const [playingMessageIndex, setPlayingMessageIndex] = useState<number | null>(null);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false); // Track if audio is actually playing vs paused
+  const [isAudioLoading, setIsAudioLoading] = useState<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -191,19 +200,27 @@ export default function HealthcareChat() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSubmit = async () => {
-    if (!input.trim() || isLoading) return;
+  const handleSubmit = async (overrideInput?: string, generateAudio?: boolean) => {
+    const textToSend = overrideInput || input.trim();
+
+    if (!textToSend || isLoading) {
+      return;
+    }
+
+    const userMessage: Message = { role: 'user', content: textToSend, rawContent: textToSend };
+    setMessages((prev) => [...prev, userMessage]);
+    setIsLoading(true);
+    setInput('');
+
+    // Create abort controller for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     const token = localStorage.getItem("token");
     if (!token) {
       router.push("/login");
       return;
     }
-
-    const userMessage: Message = { role: 'user', content: input };
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-    setInput('');
 
     try {
       const response = await fetch('/api/chat', {
@@ -213,9 +230,11 @@ export default function HealthcareChat() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          query: input,
-          session_id: currentSessionId
+          query: textToSend,
+          session_id: currentSessionId,
+          generate_audio: generateAudio,
         }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) throw new Error('Network response was not ok');
@@ -225,23 +244,121 @@ export default function HealthcareChat() {
       // If this was a new session, refresh session list
       if (!currentSessionId) {
         fetchSessions(token);
-        // Ideally backend returns the new session ID in the response or we re-fetch the latest session
-        // For now, simple re-fetch is okay.
       }
 
       const assistantMessage: Message = {
         role: 'assistant',
         content: formatResponse(data),
+        rawContent: typeof data.output === 'string' ? data.output : JSON.stringify(data.output),
+        audioUrl: data.audio_url
       };
       setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
+
+      // Play audio if generated
+      if (data.audio_url) {
+        console.log("Attempting to play audio:", data.audio_url);
+        const audio = new Audio(data.audio_url);
+        audio.play().catch(e => {
+          console.error("Audio playback error (likely auto-play blocked):", e);
+        });
+
+        // Attach audio_url to the assistant message for the UI to show a play button if needed
+        // Note: We need to extend the Message type or handle it in the content
+      }
+
+    } catch (error: any) {
+      // Don't show error if request was aborted by user
+      if (error.name === 'AbortError') {
+        console.log('Request cancelled by user');
+        return;
+      }
       console.error('Failed to fetch:', error);
       const errorMessage: Message = {
         role: 'assistant',
         content: 'Sorry, I encountered an error. Please try again.',
+        rawContent: 'Sorry, I encountered an error. Please try again.',
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
+      setIsLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const playResponse = async (text: string, index: number) => {
+    // If currently playing this message, toggle pause/play
+    if (playingMessageIndex === index && audioRef.current) {
+      if (audioRef.current.paused) {
+        audioRef.current.play();
+        setIsAudioPlaying(true);
+      } else {
+        audioRef.current.pause();
+        setIsAudioPlaying(false);
+      }
+      return;
+    }
+
+    // Stop previous if exists
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+      setPlayingMessageIndex(null);
+      setIsAudioPlaying(false);
+    }
+
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    setIsAudioLoading(index);
+
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ text })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.audio_url) {
+          const audio = new Audio(data.audio_url);
+          audioRef.current = audio;
+
+          audio.onended = () => {
+            setPlayingMessageIndex(null);
+            setIsAudioPlaying(false);
+            audioRef.current = null;
+          };
+
+          audio.onplay = () => {
+            setIsAudioPlaying(true);
+          };
+
+          audio.onpause = () => {
+            setIsAudioPlaying(false);
+          };
+
+          audio.play().catch(e => console.error(e));
+          setPlayingMessageIndex(index);
+          setIsAudioPlaying(true);
+        }
+      } else {
+        console.error("TTS failed");
+      }
+    } catch (err) {
+      console.error("TTS Error", err);
+    } finally {
+      setIsAudioLoading(null);
+    }
+  };
+
+  const stopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
       setIsLoading(false);
     }
   };
@@ -347,11 +464,50 @@ export default function HealthcareChat() {
                     )}
                     <div
                       className={`rounded-2xl p-4 shadow-lg ${msg.role === 'user'
-                          ? 'from-blue-500 to-cyan-500 bg-gradient-to-r text-white ml-auto'
-                          : 'bg-white/10 backdrop-blur-xl text-gray-100 border border-white/10'
+                        ? 'from-blue-500 to-cyan-500 bg-gradient-to-r text-white ml-auto'
+                        : 'bg-white/10 backdrop-blur-xl text-gray-100 border border-white/10'
                         }`}
                     >
                       <div className="text-sm leading-relaxed">{msg.content}</div>
+
+                      {/* Audio Controls */}
+                      {msg.role === 'assistant' && (
+                        <div className="mt-2 flex items-center gap-2 pt-2 border-t border-white/5">
+                          <button
+                            onClick={() => {
+                              const contentToRead = msg.rawContent || "No text available";
+                              playResponse(contentToRead, index);
+                            }}
+                            disabled={isAudioLoading === index}
+                            className={`text-xs flex items-center gap-2 px-3 py-1.5 rounded-full transition-all border ${playingMessageIndex === index
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                              : "bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-emerald-300"
+                              }`}
+                          >
+                            {isAudioLoading === index ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <span>Generating...</span>
+                              </>
+                            ) : playingMessageIndex === index && isAudioPlaying ? (
+                              <>
+                                <PauseCircle className="w-4 h-4" />
+                                <span>Pause</span>
+                              </>
+                            ) : playingMessageIndex === index && !isAudioPlaying ? (
+                              <>
+                                <PlayCircle className="w-4 h-4" />
+                                <span>Resume</span>
+                              </>
+                            ) : (
+                              <>
+                                <Volume2 className="w-4 h-4" />
+                                <span>Read Aloud</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {msg.role === 'user' && (
                       <div className="w-8 h-8 from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center shadow-lg shrink-0">
@@ -399,19 +555,10 @@ export default function HealthcareChat() {
             </div>
 
             <VoiceRecorder
-              onTranscribed={(text, assistant) => {
-                const userMessage: Message = { role: "user", content: text };
-                setMessages((prev) => [...prev, userMessage]);
-
-                if (assistant) {
-                  const assistantMessage: Message = {
-                    role: "assistant",
-                    content: formatResponse(assistant),
-                  };
-                  setMessages((prev) => [...prev, assistantMessage]);
-                }
-                setIsLoading(false);
-                setInput("");
+              onTranscribed={(text, language) => {
+                // Immediate/Optimistic: Call submit immediately with the transcribed text
+                // requesting audio generation
+                handleSubmit(text, true);
               }}
               onError={(err) => {
                 console.error("Voice error:", err);
@@ -419,7 +566,7 @@ export default function HealthcareChat() {
             />
 
             <button
-              onClick={handleSubmit}
+              onClick={() => handleSubmit()}
               className="px-4 py-3.5 from-emerald-500 to-cyan-500 bg-gradient-to-r hover:from-emerald-600 hover:to-cyan-600 text-white rounded-2xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-lg"
               disabled={isLoading || !input.trim()}
             >
