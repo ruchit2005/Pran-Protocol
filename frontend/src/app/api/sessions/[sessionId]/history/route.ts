@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(req: NextRequest, { params }: { params: { sessionId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
     try {
         const backendUrl = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://127.0.0.1:8000';
         const token = req.headers.get('authorization');
-        const { sessionId } = params;
+        const { sessionId } = await params;
 
         const response = await fetch(`${backendUrl}/sessions/${sessionId}/history`, {
             headers: {

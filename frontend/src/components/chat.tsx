@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import ReactMarkdown from 'react-markdown';
 import { 
   Leaf, Send, Sparkles, Loader2, Plus, MessageCircle, 
   LogOut, Menu, X, Volume2, Pause, Play, ChevronLeft, 
@@ -28,9 +29,25 @@ const formatResponse = (response: any): React.ReactNode => {
 
   const renderContent = (content: any) => {
     if (typeof content === 'string') {
-      return content.split('\n').map((line, i) => (
-        <p key={i} className="mb-2 last:mb-0 text-stone-700 leading-relaxed">{line}</p>
-      ));
+      return (
+        <div className="prose prose-stone max-w-none">
+          <ReactMarkdown
+            components={{
+              p: ({ children }) => <p className="mb-2 last:mb-0 text-stone-700 leading-relaxed">{children}</p>,
+              h1: ({ children }) => <h1 className="text-2xl font-bold text-stone-800 mb-3">{children}</h1>,
+              h2: ({ children }) => <h2 className="text-xl font-bold text-stone-800 mb-2">{children}</h2>,
+              h3: ({ children }) => <h3 className="text-lg font-semibold text-stone-800 mb-2">{children}</h3>,
+              strong: ({ children }) => <strong className="font-semibold text-stone-900">{children}</strong>,
+              ul: ({ children }) => <ul className="list-disc list-inside space-y-1 ml-4">{children}</ul>,
+              ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 ml-4">{children}</ol>,
+              li: ({ children }) => <li className="text-stone-700">{children}</li>,
+              code: ({ children }) => <code className="bg-stone-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
+            }}
+          >
+            {content}
+          </ReactMarkdown>
+        </div>
+      );
     }
     if (content?.message) {
       return (
@@ -199,6 +216,27 @@ export default function HealthcareChat() {
             try {
               if (content.trim().startsWith('{')) {
                 content = formatResponse(JSON.parse(content));
+              } else {
+                // Render markdown for plain string responses
+                content = (
+                  <div className="prose prose-stone max-w-none">
+                    <ReactMarkdown
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0 text-stone-700 leading-relaxed">{children}</p>,
+                        h1: ({ children }) => <h1 className="text-2xl font-bold text-stone-800 mb-3">{children}</h1>,
+                        h2: ({ children }) => <h2 className="text-xl font-bold text-stone-800 mb-2">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-lg font-semibold text-stone-800 mb-2">{children}</h3>,
+                        strong: ({ children }) => <strong className="font-semibold text-stone-900">{children}</strong>,
+                        ul: ({ children }) => <ul className="list-disc list-inside space-y-1 ml-4">{children}</ul>,
+                        ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 ml-4">{children}</ol>,
+                        li: ({ children }) => <li className="text-stone-700">{children}</li>,
+                        code: ({ children }) => <code className="bg-stone-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
+                      }}
+                    >
+                      {content}
+                    </ReactMarkdown>
+                  </div>
+                );
               }
             } catch (e) { /* keep string */ }
           }
