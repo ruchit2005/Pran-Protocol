@@ -34,8 +34,12 @@ export default function LoginPage() {
             const data = await res.json();
             localStorage.setItem("token", data.access_token);
             router.push("/");
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                setError(err.message);
+            } else {
+                setError("Login failed");
+            }
         } finally {
             setIsLoading(false);
         }
@@ -99,7 +103,7 @@ export default function LoginPage() {
                 </form>
 
                 <div className="mt-6 text-center text-sm text-gray-400">
-                    Don't have an account?{" "}
+                    Don&apos;t have an account?{" "}
                     <Link href="/signup" className="text-emerald-400 hover:text-emerald-300 font-medium">
                         Sign up
                     </Link>

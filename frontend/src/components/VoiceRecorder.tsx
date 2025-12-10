@@ -3,7 +3,7 @@
 import React, { useRef, useState } from "react";
 
 type Props = {
-  onTranscribed: (text: string, assistant?: any) => void;
+  onTranscribed: (text: string, assistant?: unknown) => void;
   onError?: (err: string) => void;
 };
 
@@ -55,15 +55,23 @@ export default function VoiceRecorder({ onTranscribed, onError }: Props) {
               console.error("Audio playback failed:", err)
             );
           }
-        } catch (err: any) {
-          onError?.(err?.message || "Upload failed");
+        } catch (err: unknown) {
+          if (err instanceof Error) {
+            onError?.(err.message || "Upload failed");
+          } else {
+            onError?.("Upload failed");
+          }
         }
       };
 
       mr.start();
       setRecording(true);
-    } catch (err: any) {
-      onError?.(err?.message || "Microphone not accessible");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        onError?.(err.message || "Microphone not accessible");
+      } else {
+        onError?.("Microphone not accessible");
+      }
     }
   }
 

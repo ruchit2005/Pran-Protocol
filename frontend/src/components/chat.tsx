@@ -15,25 +15,29 @@ type Session = {
   created_at: string;
 };
 
-type HistoryItem = {
-  query: string;
-  intent: string;
-};
 
-const formatResponse = (response: any): React.ReactNode => {
-  const { intent, reasoning, output, yoga_recommendations, yoga_videos } = response;
 
-  const renderContent = (content: any) => {
+import ReactMarkdown from 'react-markdown';
+
+interface ChatResponse {
+  intent?: string;
+  output?: string | { message: string; emergency?: boolean };
+  yoga_videos?: Array<{ title: string; url: string; thumbnail?: string }>;
+}
+
+const formatResponse = (response: ChatResponse): React.ReactNode => {
+  const { intent, output, yoga_videos } = response;
+
+  const renderContent = (content: string | { message: string; emergency?: boolean } | unknown) => {
     if (typeof content === 'string') {
-      return content.split('\n').map((line, i) => (
-        <p key={i} className="mb-2 last:mb-0">{line}</p>
-      ));
+      return <ReactMarkdown>{content}</ReactMarkdown>;
     }
-    if (content?.message) {
+    if (content && typeof content === 'object' && 'message' in content) {
+      const msgContent = content as { message: string; emergency?: boolean };
       return (
         <div>
-          <p className="font-medium">{content.message}</p>
-          {content.emergency && (
+          <p className="font-medium">{msgContent.message}</p>
+          {msgContent.emergency && (
             <p className="text-red-400 mt-2 font-semibold">⚠️ This is an emergency.</p>
           )}
         </div>
@@ -55,23 +59,14 @@ const formatResponse = (response: any): React.ReactNode => {
           {renderContent(output)}
         </div>
       )}
-      {yoga_recommendations && (
-        <div className="mt-4 p-4 from-purple-500/10 to-pink-500/10 rounded-xl border border-purple-500/20">
-          <h4 className="font-semibold text-purple-300 mb-3 flex items-center gap-2">
-            🧘 Yoga Recommendations
-          </h4>
-          <div className="text-gray-200">
-            {renderContent(yoga_recommendations)}
-          </div>
-        </div>
-      )}
+
       {yoga_videos && Array.isArray(yoga_videos) && yoga_videos.length > 0 && (
         <div className="mt-4">
           <h4 className="font-semibold text-red-300 mb-3 flex items-center gap-2">
             📺 Recommended Videos
           </h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {yoga_videos.map((video: any, idx: number) => (
+            {yoga_videos.map((video, idx: number) => (
               <a
                 key={idx}
                 href={video.url}
@@ -113,7 +108,7 @@ export default function HealthcareChat() {
     }
 
     fetchSessions(token);
-  }, []);
+  }, [router]);
 
   const fetchSessions = async (token: string) => {
     try {
@@ -143,16 +138,16 @@ export default function HealthcareChat() {
       if (res.ok) {
         const history = await res.json();
         // Convert DB history to UI messages
-        const uiMessages = history.map((msg: any) => {
+        const uiMessages = history.map((msg: { role: 'user' | 'assistant'; content: string }) => {
           // Try to parse assistant content if it's JSON
-          let content = msg.content;
-          if (msg.role === 'assistant') {
+          let content: string | React.ReactNode = msg.content;
+          if (msg.role === 'assistant' && typeof content === 'string') {
             try {
               // If it looks like JSON, parse it for formatResponse
               if (content.trim().startsWith('{')) {
                 content = formatResponse(JSON.parse(content));
               }
-            } catch (e) {
+            } catch {
               // Keep as string
             }
           }
@@ -173,7 +168,7 @@ export default function HealthcareChat() {
       role: 'assistant',
       content: (
         <div className="space-y-3">
-          <p className="text-lg">👋 Hello! I'm your Healthcare Assistant.</p>
+          <p className="text-lg">👋 Hello! I&apos;m your Healthcare Assistant.</p>
           <p className="text-gray-300">How can I help you today?</p>
         </div>
       )
@@ -347,8 +342,8 @@ export default function HealthcareChat() {
                     )}
                     <div
                       className={`rounded-2xl p-4 shadow-lg ${msg.role === 'user'
-                          ? 'from-blue-500 to-cyan-500 bg-gradient-to-r text-white ml-auto'
-                          : 'bg-white/10 backdrop-blur-xl text-gray-100 border border-white/10'
+                        ? 'from-blue-500 to-cyan-500 bg-gradient-to-r text-white ml-auto'
+                        : 'bg-white/10 backdrop-blur-xl text-gray-100 border border-white/10'
                         }`}
                     >
                       <div className="text-sm leading-relaxed">{msg.content}</div>

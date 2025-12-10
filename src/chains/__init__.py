@@ -10,6 +10,9 @@ from .specialized_chains import (
     AyushChain,
     HospitalLocatorChain
 )
+from .profile_chain import ProfileExtractionChain
+from .health_advisory_chain import HealthAdvisoryChain
+from .medical_reasoning_chain import MedicalMathChain
 
 __all__ = [
     'GuardrailChain',
@@ -20,4 +23,7 @@ __all__ = [
     'YogaChain',
     'AyushChain',
     'HospitalLocatorChain',
+    'ProfileExtractionChain',
+    'HealthAdvisoryChain',
+    'MedicalMathChain'
 ]

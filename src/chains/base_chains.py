@@ -54,6 +54,8 @@ class IntentClassifierChain:
 3. **ayush_support**: Traditional medicine queries (Ayurveda, Yoga, Unani, Siddha, Homeopathy)
 4. **symptom_checker**: Reporting symptoms, feeling unwell, asking about health conditions
 5. **facility_locator_support**: Finding hospitals, clinics, doctors, PHCs, healthcare facilities nearby
+6. **health_advisory**: Questions about disease outbreaks, health alerts (heatwave, dengue, covid), pollution updates, or vaccination drives.
+7. **medical_calculation**: Dosage calculations, BMI, drip rates, unit conversions.
 
 Return JSON with 'classification' and 'reasoning' fields."""),
             ("user", "{input}")

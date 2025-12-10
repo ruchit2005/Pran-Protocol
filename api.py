@@ -218,14 +218,45 @@ async def handle_chat(
         for i, msg in enumerate(history_msgs[-5:], 1):
              history_context += f"{i}. {msg.role.capitalize()}: {msg.content}\n"
 
+    # --- MEMORY & PROFILE INJECTION ---
+    # Fetch User Profile
+    from src.database.models import UserProfile
+    user_profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+    
+    # If no profile exists, create empty one
+    if not user_profile:
+        user_profile = UserProfile(user_id=current_user.id)
+        db.add(user_profile)
+        db.commit()
+        db.refresh(user_profile)
+    
+    profile_context = f"""
+    User Profile:
+    - Age: {user_profile.age or 'Unknown'}
+    - Gender: {user_profile.gender or 'Unknown'}
+    - Medical Conditions: {user_profile.medical_history or 'None'}
+    - Allergies: {user_profile.allergies or 'None'}
+    - Current Medications: {user_profile.medications or 'None'}
+    """
+    
+    full_context_query = f"{profile_context}\n{history_context}\nUser Query: {message.query}"
+    # ----------------------------------
+
     try:
         # Audit Log
         audit_ledger.add_block(current_user.id, "CHAT_QUERY", "User sent a message")
 
         result = await workflow.run(
             user_input=message.query,
-            query_for_classification=message.query + history_context
+            query_for_classification=full_context_query,
+            user_profile=user_profile # Pass profile object to workflow for potential updates
         )
+        
+        # Check if workflow updated the profile (we need to commit changes)
+        if result.get("profile_updated"):
+             db.add(user_profile) # Ensure it's in session
+             db.commit()
+             print(f"Updated user profile for {current_user.email}")
         
         # Save Assistant Message (store result as string or JSON string)
         assistant_content = str(result.get("output", ""))

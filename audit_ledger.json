@@ -40,5 +40,93 @@
         },
         "previous_hash": "743c5cc37c9adf98d05d630c200f930746d217418aa3269b44ce849637c42572",
         "hash": "390d22003be37d4fe54d93e013a23c609916a93057327037413fd43f1c0be928"
+    },
+    {
+        "index": 4,
+        "timestamp": "2025-12-10 05:26:48.744619",
+        "data": {
+            "user_id": 3,
+            "action": "SIGNUP",
+            "details": "User registered"
+        },
+        "previous_hash": "390d22003be37d4fe54d93e013a23c609916a93057327037413fd43f1c0be928",
+        "hash": "710db29743c71244a946e68bdf030b208b28ae557662dd50a169e5bcc93a1fbd"
+    },
+    {
+        "index": 5,
+        "timestamp": "2025-12-10 05:27:21.965716",
+        "data": {
+            "user_id": 3,
+            "action": "CHAT_QUERY",
+            "details": "User sent a message"
+        },
+        "previous_hash": "710db29743c71244a946e68bdf030b208b28ae557662dd50a169e5bcc93a1fbd",
+        "hash": "106d155002ac45a468dc716da85d17da82b04c044b91ad227ebbbfaf50b5f808"
+    },
+    {
+        "index": 6,
+        "timestamp": "2025-12-10 07:16:24.689580",
+        "data": {
+            "user_id": 3,
+            "action": "LOGIN",
+            "details": "User logged in"
+        },
+        "previous_hash": "106d155002ac45a468dc716da85d17da82b04c044b91ad227ebbbfaf50b5f808",
+        "hash": "d99455f7c1596874c4fa5228f8f9ec7dbbff9c2296aaed8538765a944f5dc4a0"
+    },
+    {
+        "index": 7,
+        "timestamp": "2025-12-10 07:18:10.154749",
+        "data": {
+            "user_id": 3,
+            "action": "CHAT_QUERY",
+            "details": "User sent a message"
+        },
+        "previous_hash": "d99455f7c1596874c4fa5228f8f9ec7dbbff9c2296aaed8538765a944f5dc4a0",
+        "hash": "2ede164c10b93cc12ad345e3500702868f40fbd265be42f98f019e14589e3678"
+    },
+    {
+        "index": 8,
+        "timestamp": "2025-12-10 07:20:10.821570",
+        "data": {
+            "user_id": 3,
+            "action": "CHAT_QUERY",
+            "details": "User sent a message"
+        },
+        "previous_hash": "2ede164c10b93cc12ad345e3500702868f40fbd265be42f98f019e14589e3678",
+        "hash": "a772ad1cbc287dcff32e168e34cdf4b5cb750e3a6b02a4963292984ac49804ed"
+    },
+    {
+        "index": 9,
+        "timestamp": "2025-12-10 13:04:07.641342",
+        "data": {
+            "user_id": 4,
+            "action": "SIGNUP",
+            "details": "User registered"
+        },
+        "previous_hash": "a772ad1cbc287dcff32e168e34cdf4b5cb750e3a6b02a4963292984ac49804ed",
+        "hash": "e4ba3940b50c01e2cbb29983702efd2ad37e24c044fa0a03f44cd6930dcf7990"
+    },
+    {
+        "index": 10,
+        "timestamp": "2025-12-10 13:04:08.378978",
+        "data": {
+            "user_id": 4,
+            "action": "LOGIN",
+            "details": "User logged in"
+        },
+        "previous_hash": "e4ba3940b50c01e2cbb29983702efd2ad37e24c044fa0a03f44cd6930dcf7990",
+        "hash": "7babd2ac02eb5f8d84c609b8267ba9e57b0f616de35a3efaa715999b71b828e1"
+    },
+    {
+        "index": 11,
+        "timestamp": "2025-12-10 13:04:09.456226",
+        "data": {
+            "user_id": 4,
+            "action": "CHAT_QUERY",
+            "details": "User sent a message"
+        },
+        "previous_hash": "7babd2ac02eb5f8d84c609b8267ba9e57b0f616de35a3efaa715999b71b828e1",
+        "hash": "0293dd6c550f7953082ab597365ad0068fd767da6805a7ea523db53c438c2354"
     }
 ]

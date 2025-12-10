@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: { sessionId: s
 
         const data = await response.json();
         return NextResponse.json(data);
-    } catch (error) {
-        return NextResponse.json({ detail: 'Internal Server Error' }, { status: 500 });
+    } catch {
+        return NextResponse.json({ detail: "Failed to fetch history" }, { status: 500 });
     }
 }

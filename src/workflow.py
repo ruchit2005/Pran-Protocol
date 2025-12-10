@@ -11,8 +11,12 @@ from .chains import (
     MentalWellnessChain,
     YogaChain,
     AyushChain,
-    HospitalLocatorChain
+    HospitalLocatorChain,
+    ProfileExtractionChain,
+    HealthAdvisoryChain,
+    MedicalMathChain
 )
+from .evaluation.validator import FactCheckerChain
 from .utils.emergency import HybridEmergencyDetector
 from .utils.youtube_client import search_videos
 
@@ -28,17 +32,60 @@ class HealthcareWorkflow:
         self.symptom_chain = SymptomCheckerChain(config.llm)
         self.emergency_detector = HybridEmergencyDetector()
         
+        # Profile Extractor
+        self.profile_extractor = ProfileExtractionChain(config.llm)
+        
         # Agents using WEB SEARCH get config.search_tool
         self.gov_scheme_chain = GovernmentSchemeChain(config.llm, config.search_tool)
         self.mental_wellness_chain = MentalWellnessChain(config.llm, config.search_tool)
         self.hospital_chain = HospitalLocatorChain(config.llm, config.search_tool)
         
+        # New Chains
+        self.advisory_chain = HealthAdvisoryChain(config.llm)
+        self.math_chain = MedicalMathChain(config.llm)
+        self.validator = FactCheckerChain(config.llm)
+        
         # Agents using RAG get config.rag_retriever
         self.ayush_chain = AyushChain(config.llm, config.rag_retriever)
         self.yoga_chain = YogaChain(config.llm, config.rag_retriever)
 
-    async def run(self, user_input: str, query_for_classification: str) -> Dict[str, Any]:
+    async def run(self, user_input: str, query_for_classification: str, user_profile: Any = None) -> Dict[str, Any]:
         """Execute the workflow"""
+        
+
+
+    async def run(self, user_input: str, query_for_classification: str, user_profile: Any = None) -> Dict[str, Any]:
+        """Execute the workflow"""
+        
+        # Step 0: Profile Extraction (Background)
+        profile_update = None
+        if user_profile:
+            print("📝 [STEP 0/3] Checking for Medical Profile Updates...")
+            profile_update = self.profile_extractor.run(user_input, user_profile)
+            if profile_update:
+                # Update the profile object (User Profile is an SQLAlchemy model object typically, but might need careful handling)
+                import json
+                
+                if profile_update.get("age"): user_profile.age = profile_update["age"]
+                if profile_update.get("gender"): user_profile.gender = profile_update["gender"]
+                
+                # Update JSON lists
+                def update_json_list(current_json, new_items):
+                    current = json.loads(current_json) if current_json else []
+                    if isinstance(new_items, list):
+                        for item in new_items:
+                            if item not in current:
+                                current.append(item)
+                    return json.dumps(current)
+
+                if profile_update.get("new_conditions"):
+                    user_profile.medical_history = update_json_list(user_profile.medical_history, profile_update["new_conditions"])
+                if profile_update.get("new_allergies"):
+                    user_profile.allergies = update_json_list(user_profile.allergies, profile_update["new_allergies"])
+                if profile_update.get("new_medications"):
+                    user_profile.medications = update_json_list(user_profile.medications, profile_update["new_medications"])
+                    
+                print("   ✓ Profile object updated in memory")
         
         # Step 1: Safety check
         print("🛡️  [STEP 1/3] Running Safety Guardrail Check...")
@@ -55,15 +102,24 @@ class HealthcareWorkflow:
         
         # Step 3: Route to appropriate chain (using the clean user_input)
         print(f"🔗 [STEP 3/3] Executing Chain for '{intent}'...")
-        result = {"intent": intent, "reasoning": classification.get("reasoning"), "output": None}
+        result = {"intent": intent, "reasoning": classification.get("reasoning"), "output": None, "profile_updated": bool(profile_update)}
         
         if intent == "government_scheme_support":
             result["output"] = self.gov_scheme_chain.run(user_input)
             
+        elif intent == "health_advisory":
+            result["output"] = self.advisory_chain.run(user_input)
+            
+        elif intent == "medical_calculation":
+            math_result = self.math_chain.run(user_input)
+            result["output"] = f"**Calculation Result:** {math_result.get('result')}\n\n**Steps:**\n" + "\n".join([f"- {s}" for s in math_result.get('steps', [])])
+            
         elif intent == "mental_wellness_support":
-            result["output"] = self.mental_wellness_chain.run(user_input)
-            # Yoga is RAG-based, so it will use the RAG retriever
-            result["yoga_recommendations"] = self.yoga_chain.run(user_input)
+            wellness_res = self.mental_wellness_chain.run(user_input)
+            yoga_res = self.yoga_chain.run(user_input)
+            
+            result["output"] = f"{wellness_res}\n\n### 🧘 Yoga for Mental Wellness\n{yoga_res}"
+            
             # Add YouTube videos for Yoga
             try:
                 videos = await search_videos(f"yoga for mental wellness {user_input}")
@@ -84,6 +140,24 @@ class HealthcareWorkflow:
             result["output"] = "I couldn't understand your request. Please try rephrasing."
         
         print("   ✓ Chain execution complete\n")
+        
+        # Step 4: Validate Medical Advice
+        if intent in ["symptom_checker", "ayush_support", "health_advisory"] or (isinstance(result.get("output"), str) and "symptom" in result["output"].lower()):
+            output_content = result.get("output")
+            # Handle dictionary output (e.g. from symptom checker)
+            if isinstance(output_content, dict):
+                 # For now, just skip complex dict validation or validate the 'message' part
+                 pass 
+            elif isinstance(output_content, str):
+                print("🩺 [STEP 4/4] Validating Medical Advice...")
+                validation = self.validator.validate(user_input, output_content)
+                if not validation.get("is_safe", True):
+                    print(f"   ⚠️ Unsafe content detected: {validation.get('reason')}")
+                    result["output"] = validation.get("revised_response") or "I cannot provide a response to this query due to safety concerns. Please consult a doctor immediately."
+                    result["validation_status"] = "blocked"
+                else:
+                    print("   ✓ Validation passed")
+
         return result
     
     async def _handle_symptoms(self, user_input: str) -> Dict[str, Any]:
@@ -103,18 +177,38 @@ class HealthcareWorkflow:
 
         if is_emergency:
             hospital_query = f"Find nearest emergency hospitals for: {user_input}"
-            result["output"] = {
-                "emergency": True,
-                "message": "⚠️ URGENT: Seek immediate medical attention. Call emergency services (108/112).",
-                "reason": reason or "Critical symptoms detected"
-            }
-            result["hospital_locator"] = self.hospital_chain.run(hospital_query)
+            hospital_list = self.hospital_chain.run(hospital_query)
+            
+            result["output"] = f"""# ⚠️ URGENT MEDICAL OBSERVATION
+**Immediate attention recommended.**
+Reason: {reason or "Critical symptoms detected"}
+
+**Call Emergency Services (108/112)**
+
+### 🏥 Nearby Emergency Facilities
+{hospital_list}
+"""
         else:
             symptom_text = f"Patient has {', '.join(symptom_data.symptoms)} with severity {symptom_data.severity}/10"
-            result["output"] = {"emergency": False, "message": "Based on your symptoms, here are some recommendations:"}
-            # All follow-up recommendations for symptoms will use the RAG system
-            result["ayurveda_recommendations"] = self.ayush_chain.run(f"Provide ayurvedic remedies for: {symptom_text}")
-            result["yoga_recommendations"] = self.yoga_chain.run(f"Suggest yoga for: {symptom_text}")
+            
+            # Run agents in parallel or sequence
+            ayurveda_rec = self.ayush_chain.run(f"Provide ayurvedic remedies for: {symptom_text}")
+            yoga_rec = self.yoga_chain.run(f"Suggest yoga for: {symptom_text}")
+            wellness_rec = self.mental_wellness_chain.run(f"Provide wellness advice for: {symptom_text}")
+            
+            # Store raw results for specific frontend components if needed
+            result["ayurveda_recommendations"] = ayurveda_rec
+            # result["yoga_recommendations"] = yoga_rec # Commented out to avoid duplicate display in frontend (now included in main output)
+            result["general_guidance"] = wellness_rec
+            
+            # Construct unified Markdown Output to ensure visibility
+            unified_output = "Based on your symptoms, here are some recommendations:\n\n"
+            
+            unified_output += f"### 🌿 Ayurveda & Natural Remedies\n{ayurveda_rec}\n\n"
+            unified_output += f"### 🧘 Yoga & Breathing\n{yoga_rec}\n\n"
+            unified_output += f"### 🧠 Mental Wellness & General Advice\n{wellness_rec}\n"
+            
+            result["output"] = unified_output
             
             # Add YouTube videos for Yoga
             try:
@@ -122,7 +216,5 @@ class HealthcareWorkflow:
                 result["yoga_videos"] = videos
             except Exception as e:
                 print(f"⚠️ Failed to fetch YouTube videos: {e}")
-
-            result["general_guidance"] = self.mental_wellness_chain.run(f"Provide wellness advice for: {symptom_text}")
         
         return result

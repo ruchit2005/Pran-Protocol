@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Heart, Lock, Mail, Loader2, User } from "lucide-react";
+import { Heart, Lock, Mail, Loader2 } from "lucide-react";
 
 export default function SignupPage() {
     const router = useRouter();
@@ -31,8 +31,12 @@ export default function SignupPage() {
             const data = await res.json();
             localStorage.setItem("token", data.access_token);
             router.push("/");
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                setError(err.message);
+            } else {
+                setError("Signup failed");
+            }
         } finally {
             setIsLoading(false);
         }
