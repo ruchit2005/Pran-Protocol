@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -36,8 +36,18 @@ class Settings(BaseSettings):
     )
     
     # ChromaDB settings
-    CHROMA_COLLECTION_NAME: str = "documents"
+    CHROMA_COLLECTION_NAME: str = "documents"  # Default collection (legacy)
     CHROMA_DISTANCE_METRIC: str = "cosine"  # Options: cosine, l2, ip
+    
+    # Domain-specific collections for multi-agent RAG
+    COLLECTION_NAMES: Dict[str, str] = Field(default={
+        "yoga": "yoga_collection",
+        "ayush": "ayush_collection",
+        "mental_wellness": "mental_wellness_collection",
+        "symptoms": "symptoms_collection",
+        "government_schemes": "schemes_collection",
+        "general": "documents"  # fallback
+    })
     
     # Retrieval settings
     TOP_K: int = 5

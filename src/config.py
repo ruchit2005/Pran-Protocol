@@ -1,11 +1,12 @@
 import os
-from typing import Optional
+from typing import Optional, Dict
 from dotenv import load_dotenv
 
 from langchain_openai import ChatOpenAI
 from langchain_community.tools.tavily_search import TavilySearchResults
 from src.retrieval.retriever import Retriever
 from src.vector_store.chroma_manager import ChromaDBManager
+from config.settings import settings
 
 load_dotenv()
 
@@ -38,21 +39,54 @@ class HealthcareConfig:
         )
         print("   ✓ LLM and Web Search ready.")
         
-        # 3. Initialize RAG System
-        print("   -> Initializing RAG System...")
+        # 3. Initialize Domain-Specific RAG Systems
+        print("   -> Initializing Domain-Specific RAG Systems...")
+        self.rag_retrievers: Dict[str, Retriever] = {}
+        self.chroma_managers: Dict[str, ChromaDBManager] = {}
+        
         try:
-            chroma_manager = ChromaDBManager()
+            # Create retrievers for each domain
+            for domain, collection_name in settings.COLLECTION_NAMES.items():
+                try:
+                    chroma_manager = ChromaDBManager(collection_name=collection_name)
+                    self.chroma_managers[domain] = chroma_manager
+                    
+                    # Create retriever with strategist enabled
+                    retriever = Retriever(
+                        chroma_manager, 
+                        use_reranking=True, 
+                        use_strategist=True
+                    )
+                    self.rag_retrievers[domain] = retriever
+                    print(f"   ✓ {domain} RAG system ready (collection: {collection_name})")
+                except Exception as e:
+                    print(f"   ⚠️  Could not initialize {domain} RAG: {e}")
             
-            # --- THIS IS THE ONLY CHANGE NEEDED ---
-            # Activate the new agentic Strategist by adding the argument here.
-            self.rag_retriever = Retriever(
-                chroma_manager, 
-                use_reranking=True, 
-                use_strategist=True  # This activates the new feature
-            )
-            # --- END OF CHANGE ---
-
-            print("   ✓ RAG System ready.")
+            # Fallback to general retriever
+            if not self.rag_retrievers:
+                print("   -> Creating fallback general RAG system...")
+                chroma_manager = ChromaDBManager()
+                self.chroma_managers['general'] = chroma_manager
+                self.rag_retrievers['general'] = Retriever(
+                    chroma_manager,
+                    use_reranking=True,
+                    use_strategist=True
+                )
+            
+            # Keep legacy rag_retriever for backward compatibility
+            self.rag_retriever = self.rag_retrievers.get('general') or list(self.rag_retrievers.values())[0]
+            
+            print("   ✓ RAG Systems initialized.")
         except Exception as e:
             print(f"   ⚠️  Could not initialize RAG system: {e}. AYUSH/Yoga agents will have limited capabilities.")
             self.rag_retriever = None
+            self.rag_retrievers = {}
+            self.chroma_managers = {}
+    
+    def get_retriever(self, domain: str) -> Optional[Retriever]:
+        """Get domain-specific retriever, fallback to general if not found"""
+        return self.rag_retrievers.get(domain) or self.rag_retrievers.get('general')
+    
+    def get_chroma_manager(self, domain: str) -> Optional[ChromaDBManager]:
+        """Get domain-specific ChromaDB manager"""
+        return self.chroma_managers.get(domain) or self.chroma_managers.get('general')
