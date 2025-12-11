@@ -31,18 +31,20 @@ class HealthcareWorkflow:
         self.fusion_chain = ResponseFusionChain(config.llm)
         self.emergency_detector = HybridEmergencyDetector()
         
-        # Agents using WEB SEARCH get config.search_tool
-        self.mental_wellness_chain = MentalWellnessChain(config.llm, config.search_tool)
-        self.hospital_chain = HospitalLocatorChain(config.llm, config.search_tool)
-        
         # Agents using domain-specific RAG retrievers
         yoga_retriever = config.get_retriever('yoga') or config.rag_retriever
         ayush_retriever = config.get_retriever('ayush') or config.rag_retriever
         schemes_retriever = config.get_retriever('government_schemes') or config.rag_retriever
+        mental_wellness_retriever = config.get_retriever('mental_wellness') or config.rag_retriever
         
+        # RAG-only agents (no web search for medical advice)
         self.ayush_chain = AyushChain(config.llm, ayush_retriever)
         self.yoga_chain = YogaChain(config.llm, yoga_retriever)
+        self.mental_wellness_chain = MentalWellnessChain(config.llm, mental_wellness_retriever)
+        
+        # Agents that can use web search
         self.gov_scheme_chain = GovernmentSchemeChain(config.llm, schemes_retriever, config.search_tool)
+        self.hospital_chain = HospitalLocatorChain(config.llm, config.search_tool)
 
     async def run(self, user_input: str, query_for_classification: str) -> Dict[str, Any]:
         """Execute the workflow with multi-agent orchestration"""
@@ -205,8 +207,11 @@ class HealthcareWorkflow:
             try:
                 print(f"   🎥 Waiting for YouTube results...")
                 videos = await youtube_task
-                result["yoga_videos"] = videos
-                print(f"   ✅ YouTube search completed")
+                if videos:
+                    result["yoga_videos"] = videos
+                    print(f"   ✅ YouTube search completed - {len(videos)} videos found")
+                else:
+                    print(f"   ⚠️ YouTube search returned no videos")
             except Exception as e:
                 print(f"   ⚠️ YouTube search failed: {e}")
         
