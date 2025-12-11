@@ -1,166 +1,366 @@
-# Healthcare Multi-Agent Workflow
+# 🏥 Swastha - AI Healthcare Assistant
 
-An intelligent healthcare support system using LangChain and OpenAI with multi-agent architecture.
+An intelligent healthcare support system powered by Multi-Agent RAG architecture, combining traditional Ayurvedic wisdom with modern AI technology.
 
-## Features
+## ✨ Features
 
-- 🛡️ **Safety Guardrails** - Content filtering and PII protection
-- 🎯 **Intent Classification** - Smart routing to specialized agents
-- 🩺 **Symptom Checker** - Emergency detection with hospital routing
-- 💊 **Multi-Agent Recommendations**:
-  - 🌿 Ayurvedic remedies
-  - 🧘 Yoga therapy
+### 🤖 **Multi-Agent Architecture**
+- **Safety Guardrails** - Content filtering and PII protection
+- **Intent Classification** - Smart routing to specialized agents
+- **Symptom Checker** - Emergency detection with hospital routing
+- **RAG-Powered Recommendations**:
+  - 🌿 Ayurvedic remedies from curated knowledge base
+  - 🧘 Yoga therapy with video recommendations
   - 💡 Wellness guidance
-- 🏥 **Government Schemes** - Health insurance and benefits
-- 🧠 **Mental Wellness** - Support and resources
-- 📍 **Hospital Locator** - Find nearby facilities
+- **Government Schemes** - Health insurance and benefits search
+- **Mental Wellness** - Support and resources
+- **Hospital Locator** - Find nearby facilities
 
-## Project Structure
+### 🔐 **Authentication**
+- Google OAuth via Firebase
+- Secure JWT tokens
+- User profile management
+- Session history tracking
+
+### 🎨 **Modern UI**
+- Next.js 16 + React 19 frontend
+- Real-time chat interface
+- Voice input support
+- Text-to-speech responses
+- Responsive design
+
+## 🏗️ Project Structure
 
 ```
 .
-├── src/
-│   ├── __init__.py           # Package initialization
-│   ├── config.py             # Configuration management
-│   ├── schemas.py            # Data models
-│   ├── workflow.py           # Main workflow orchestrator
-│   └── chains/
-│       ├── __init__.py
-│       ├── base_chains.py    # Core chain implementations
-│       └── specialized_chains.py  # Domain-specific chains
-├── cli.py                    # Interactive CLI interface
-├── requirements.txt          # Python dependencies
-├── .env.example             # Example environment variables
-├── .env                     # Your actual API keys (not in git)
-└── README.md               # This file
+├── src/                          # Backend Python modules
+│   ├── chains/                   # LangChain agents
+│   │   ├── base_chains.py       # Core chains (safety, intent, fusion)
+│   │   └── specialized_chains.py # Domain agents (ayurveda, yoga, etc.)
+│   ├── auth/                     # Authentication
+│   │   ├── firebase_auth.py     # Firebase Admin SDK
+│   │   └── security.py          # JWT & password hashing
+│   ├── database/                 # SQLite models
+│   ├── document_processor/       # RAG document ingestion
+│   ├── embeddings/               # Sentence transformers
+│   ├── retrieval/                # Vector search & reranking
+│   └── vector_store/             # ChromaDB management
+├── frontend/                     # Next.js application
+│   ├── src/
+│   │   ├── app/                 # Pages & API routes
+│   │   │   ├── login/           # Login page
+│   │   │   ├── signup/          # Signup page
+│   │   │   └── api/             # API endpoints (proxy to backend)
+│   │   ├── components/          # React components
+│   │   │   └── chat.tsx         # Main chat interface
+│   │   └── lib/
+│   │       └── firebase.ts      # Firebase client config
+│   └── next.config.ts           # Next.js configuration
+├── config/                       # Configuration files
+│   ├── settings.py              # Application settings
+│   └── firebase-service-account.json  # (not in git)
+├── data/                         # RAG data
+│   ├── chroma_db/               # Vector database
+│   ├── raw/                     # Source documents
+│   └── processed/               # Processed documents
+├── api.py                        # FastAPI backend
+├── ingest.py                     # RAG ingestion script
+├── cli.py                        # CLI interface
+└── requirements.txt              # Python dependencies
 ```
 
-## Setup
+## 🚀 Quick Start
 
-### 1. Install Dependencies
+### Prerequisites
+- Python 3.8+
+- Node.js 18+
+- Firebase account
+- OpenAI API key
+
+### 1. Clone & Install
 
 ```bash
+# Clone repository
+git clone <your-repo-url>
+cd Pran-Protocol
+
+# Install Python dependencies
 pip install -r requirements.txt
+
+# Install frontend dependencies
+cd frontend
+npm install
+cd ..
 ```
 
-### 2. Configure API Keys
+### 2. Environment Setup
 
-Create a `.env` file in the project root:
-
+**Create `.env` file from example:**
 ```bash
 cp .env.example .env
 ```
 
-Edit the `.env` file and add your API keys:
-
+**Edit `.env` with your credentials:**
 ```env
-OPENAI_API_KEY=sk-your-actual-openai-key-here
-TAVILY_API_KEY=tvly-your-actual-tavily-key-here
+# OpenAI
+OPENAI_API_KEY=sk-your-key-here
+
+# Tavily (for web search)
+TAVILY_API_KEY=tvly-your-key-here
+
+# YouTube Data API
+YOUTUBE_API_KEY=your-youtube-key
+
+# Firebase (from Firebase Console)
+FIREBASE_API_KEY=your-firebase-api-key
+FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+FIREBASE_MESSAGING_SENDER_ID=123456789
+FIREBASE_APP_ID=1:123456789:web:abcdef
+
+# Backend URL
+BACKEND_URL=http://localhost:8000
+
+# JWT Secret (generate random string)
+SECRET_KEY=your-super-secret-key
 ```
 
-#### Getting API Keys
+### 3. Firebase Setup
 
-- **OpenAI API Key**: Get from [OpenAI Platform](https://platform.openai.com/api-keys)
-- **Tavily API Key**: Get free key from [Tavily](https://tavily.com) (1000 searches/month free)
+**Download Service Account Key:**
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Select your project
+3. Go to **Project Settings** → **Service Accounts**
+4. Click **Generate new private key**
+5. Save as `config/firebase-service-account.json`
 
-### 3. Run the Application
+**Enable Google Sign-In:**
+1. Go to **Authentication** → **Sign-in method**
+2. Enable **Google** provider
+3. Add your domain (localhost for development)
+
+**Detailed setup guide:** See `FIREBASE_SETUP.md`
+
+### 4. Run the Application
 
 ```bash
-python cli.py
+# Terminal 1: Start Backend (from root directory)
+uvicorn api:app --reload --host 0.0.0.0 --port 8000
+
+# Terminal 2: Start Frontend (from root directory)
+cd frontend
+npm run dev
 ```
 
-or
+**Access the app:** Open [http://localhost:3000](http://localhost:3000)
+
+### 5. (Optional) Ingest Custom Documents
+
+Add your own Ayurveda/Yoga documents to enhance the knowledge base:
 
 ```bash
-./cli.py
+# Place documents in data/raw/
+# Then run ingestion:
+python ingest.py
 ```
 
-## Usage
+## 📖 Usage
 
-### Interactive CLI
+### Web Interface
 
-The CLI provides a stateful chat interface with history:
+1. **Sign Up / Login** with Google
+2. **Start chatting** with the healthcare assistant
+3. **Ask questions** about:
+   - Ayurvedic remedies
+   - Yoga poses and exercises
+   - Symptoms and health concerns
+   - Government health schemes
+   - Mental wellness support
 
-```bash
-$ python cli.py
-🏥 Healthcare Assistant - Initializing...
-✓ Ready!
+### Voice Features
+- 🎤 Click microphone icon to speak your query
+- 🔊 Click speaker icon on bot responses to hear them
 
-Commands: 'exit' to quit, 'clear' to clear history, 'history' to view
+### Example Queries
 
-You: I have a backache for 2 days
+```
+"I have a backache for 2 days"
+"What yoga poses help with anxiety?"
+"Remedies for migraine?"
+"Government health schemes in India"
+"Meditation techniques for better sleep"
 ```
 
-### Commands
+## 🏗️ Architecture
 
-- `exit` - Quit the application
-- `clear` - Clear conversation history
-- `history` - View conversation history
-
-### Programmatic Usage
-
-```python
-from src import HealthcareConfig, HealthcareWorkflow
-
-# Configuration (loads from .env automatically)
-config = HealthcareConfig()
-
-# Initialize workflow
-workflow = HealthcareWorkflow(config)
-
-# Process query
-result = workflow.run("I have a headache and fever")
-print(result)
-```
-
-## Workflow Architecture
+### Multi-Agent Workflow
 
 ```
 User Query
     ↓
-🛡️ Safety Guardrail Check
+🛡️ Safety Guardrail (PII & Content Filter)
     ↓
-🎯 Intent Classification
+🎯 Intent Classification (8 specialized agents)
     ↓
-🔗 Route to Specialized Agent
+📊 Route to Agent
     ↓
-┌─────────────────────┐
-│ Government Schemes  │ → Search & Recommend
-│ Mental Wellness     │ → Support + Yoga
-│ AYUSH Support       │ → Traditional Medicine
-│ Symptom Checker     │ → Assess → Multi-Agent:
-│                     │   ├─ Emergency? → Hospital Locator
-│                     │   └─ Non-Emergency? → Ayurveda + Yoga + Wellness
-│ Hospital Locator    │ → Find Facilities
-└─────────────────────┘
+┌──────────────────────────┐
+│ Symptom Checker          │ → Multi-Agent Response:
+│                          │   ├─ Emergency? → Hospital Locator
+│                          │   └─ Non-Emergency:
+│                          │      ├─ 🌿 Ayurveda Agent (RAG)
+│                          │      ├─ 🧘 Yoga Agent (RAG + YouTube)
+│                          │      └─ 💡 Wellness Agent
+├──────────────────────────┤
+│ Government Schemes       │ → Web Search + Recommendations
+│ Mental Wellness          │ → Support + Yoga Videos
+│ AYUSH Support            │ → Traditional Medicine (RAG)
+│ Hospital Locator         │ → Find Facilities
+│ Yoga Therapy             │ → Poses + Videos (RAG + YouTube)
+│ Ayurveda                 │ → Remedies (RAG)
+│ General Wellness         │ → Guidance (RAG)
+└──────────────────────────┘
+    ↓
+🔗 Response Fusion (Combines multi-agent outputs)
+    ↓
+📤 Formatted Response to User
 ```
 
-## Security
+### Tech Stack
 
-- ✅ Never commit your `.env` file to version control
-- ✅ The `.env` file is already listed in `.gitignore`
-- ✅ Built-in guardrails for PII and harmful content
-- ✅ Medical emergencies are not blocked and routed appropriately
-- ✅ Keep your API keys secure and don't share them
+**Backend:**
+- FastAPI - REST API
+- LangChain - Agent orchestration
+- ChromaDB - Vector database
+- SQLite - User & session storage
+- Firebase Admin SDK - Authentication
+- OpenAI GPT-4o-mini - LLM
+- Sentence Transformers - Embeddings
 
-## Development
+**Frontend:**
+- Next.js 16 - React framework
+- TypeScript - Type safety
+- Tailwind CSS - Styling
+- Firebase Auth - Google OAuth
 
-### Adding New Chains
+## 🔐 Security
 
-1. Create a new chain class in `src/chains/specialized_chains.py`
-2. Add it to `src/chains/__init__.py`
-3. Initialize in `src/workflow.py`
-4. Add routing logic in the `run()` method
+- ✅ All sensitive data in `.env` (not committed to git)
+- ✅ Firebase service account JSON excluded from git
+- ✅ JWT token authentication
+- ✅ Password hashing with bcrypt
+- ✅ PII detection and filtering
+- ✅ Content safety guardrails
+- ✅ Emergency queries prioritized (never blocked)
 
-### Verbose Debugging
+### What's Protected in `.gitignore`
+- `.env` (all API keys and secrets)
+- `config/firebase-service-account.json`
+- `healthcare.db` (user database)
+- `data/chroma_db/` (vector database)
+- `audio_cache/`, `logs/`
+- `node_modules/`, `__pycache__/`
 
-The CLI runs with verbose logging enabled. You'll see:
-- Safety check results
-- Intent classification
-- Chain execution steps
-- Agent invocations
-- Search queries and results
+## 📚 API Documentation
 
-## License
+Once backend is running, visit:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
-MIT
+### Key Endpoints
+- `POST /auth/signup` - Create account
+- `POST /auth/login` - Password login
+- `POST /auth/firebase-login` - Google OAuth
+- `GET /auth/me` - Get user profile
+- `POST /chat` - Send message
+- `GET /sessions` - List chat sessions
+- `POST /tts` - Text-to-speech
+
+## 🛠️ Development
+
+### Project Commands
+
+```bash
+# Backend
+uvicorn api:app --reload              # Start with auto-reload
+python cli.py                         # CLI interface
+python ingest.py                      # Ingest documents
+python check_db.py                    # Inspect database
+
+# Frontend
+cd frontend
+npm run dev                           # Development server
+npm run build                         # Production build
+npm run start                         # Production server
+```
+
+### Adding New Agents
+
+1. **Create chain class** in `src/chains/specialized_chains.py`:
+```python
+class MyNewChain(BaseChain):
+    def invoke(self, inputs: dict) -> dict:
+        # Your logic here
+        return {"output": "response"}
+```
+
+2. **Initialize in workflow** (`src/workflow.py`):
+```python
+self.my_chain = MyNewChain(config)
+```
+
+3. **Add routing logic** in `run()` method
+
+### RAG Document Ingestion
+
+Add documents to `data/raw/` then run:
+```bash
+python ingest.py
+```
+
+Supported formats: `.txt`, `.pdf`, `.docx`, `.md`
+
+### Database Schema
+
+**Users Table:**
+- `id`, `email`, `hashed_password`
+- `firebase_uid`, `display_name`, `photo_url`
+- `created_at`
+
+**Sessions Table:**
+- `id`, `user_id`, `title`, `created_at`
+
+**Messages Table:**
+- `id`, `session_id`, `role`, `content`, `timestamp`
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit changes (`git commit -m 'Add AmazingFeature'`)
+4. Push to branch (`git push origin feature/AmazingFeature`)
+5. Open Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Ayurvedic knowledge base curated from traditional texts
+- Yoga therapy based on authentic practices
+- Built with LangChain, OpenAI, and Firebase
+- UI inspired by traditional Indian aesthetics
+
+## 📞 Support
+
+For setup help or issues:
+1. Check `FIREBASE_SETUP.md` for Firebase configuration
+2. Check `SECURITY.md` for security guidelines
+3. See API docs at `/docs` when backend is running
+4. Open an issue on GitHub
+
+---
+
+**Made with 🌿 for holistic healthcare**

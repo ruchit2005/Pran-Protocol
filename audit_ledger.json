@@ -1041,5 +1041,16 @@
         },
         "previous_hash": "060071c3ab0f485a6d84789d67c749ae4395d6d3a73b262ed90407803b26df3a",
         "hash": "b42075d6419d6bef642b223cd2387f32c738719f48460c07566f4bf7b73b2576"
+    },
+    {
+        "index": 95,
+        "timestamp": "2025-12-11 07:40:28.113751",
+        "data": {
+            "user_id": 5,
+            "action": "FIREBASE_LOGIN",
+            "details": "User logged in via Google"
+        },
+        "previous_hash": "b42075d6419d6bef642b223cd2387f32c738719f48460c07566f4bf7b73b2576",
+        "hash": "6f2351d5e5c9d96dd09c5e5d7717fac75a4c8e754c7d11d76932b231bad1c50c"
     }
 ]
