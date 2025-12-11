@@ -38,30 +38,26 @@ export default function ProfilePage() {
     }
 
     try {
-      // Assuming GET /api/auth/me returns user details
-      // If your API is different, adjust the endpoint here
       const res = await fetch("/api/auth/me", {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       if (res.ok) {
         const data = await res.json();
+        console.log("Profile data:", data); // Debug log
         setProfile({
-            name: data.name || data.username || "", // Handle different API response structures
-            email: data.email || "",
-            phone: data.phone || ""
+          name: data.display_name || "",
+          email: data.email || "",
+          phone: data.phone || ""
         });
       } else {
-        // Fallback for hackathon demo if API isn't ready
-        // You can remove this else block once backend is ready
-        setProfile({
-            name: "Ayurveda Practitioner",
-            email: "user@example.com",
-            phone: ""
-        });
+        const errorText = await res.text();
+        console.error("Profile fetch failed:", res.status, errorText);
+        setError(`Failed to load profile: ${res.status}`);
       }
     } catch (err) {
       console.error("Failed to load profile", err);
+      setError("Failed to load profile. Please try again.");
     } finally {
       setLoading(false);
     }

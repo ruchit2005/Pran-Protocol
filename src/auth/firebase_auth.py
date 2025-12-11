@@ -52,12 +52,13 @@ def initialize_firebase():
         traceback.print_exc()
 
 
-def verify_firebase_token(id_token: str) -> Optional[dict]:
+def verify_firebase_token(id_token: str, clock_skew_seconds: int = 10) -> Optional[dict]:
     """
     Verify Firebase ID token and return decoded token with user info
     
     Args:
         id_token: Firebase ID token from client
+        clock_skew_seconds: Allowed clock skew in seconds (default 10)
         
     Returns:
         Decoded token dict with user info or None if invalid
@@ -71,9 +72,9 @@ def verify_firebase_token(id_token: str) -> Optional[dict]:
         return None
     
     try:
-        # Verify the ID token
+        # Verify the ID token with clock skew tolerance
         print(f"🔐 Verifying Firebase token...")
-        decoded_token = auth.verify_id_token(id_token)
+        decoded_token = auth.verify_id_token(id_token, clock_skew_seconds=clock_skew_seconds)
         print(f"✓ Token verified for user: {decoded_token.get('email')}")
         return decoded_token
     except Exception as e:

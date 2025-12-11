@@ -16,6 +16,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Allow dev server access from local network
+  allowedDevOrigins: [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://172.17.118.62:3000', // Your friend's local network IP
+  ],
   env: {
     NEXT_PUBLIC_FIREBASE_API_KEY: process.env.FIREBASE_API_KEY,
     NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.FIREBASE_AUTH_DOMAIN,

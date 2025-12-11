@@ -1096,5 +1096,49 @@
         },
         "previous_hash": "3424b84f117d3e7badba63777b737393c17d426a2cf9fa77bee504147317b210",
         "hash": "44bc8c5dda4f87236f47c7d4d113b619350f426a3e2ce29410a349a12cc42748"
+    },
+    {
+        "index": 100,
+        "timestamp": "2025-12-11 13:45:17.684295",
+        "data": {
+            "user_id": 5,
+            "action": "CHAT_QUERY",
+            "details": "User sent a message"
+        },
+        "previous_hash": "44bc8c5dda4f87236f47c7d4d113b619350f426a3e2ce29410a349a12cc42748",
+        "hash": "281fe8f76ab5ccf53f5a0c7254975d49c45d51dde6a94ff7f5993223f56cd19f"
+    },
+    {
+        "index": 101,
+        "timestamp": "2025-12-11 13:47:28.962111",
+        "data": {
+            "user_id": 5,
+            "action": "CHAT_QUERY",
+            "details": "User sent a message"
+        },
+        "previous_hash": "281fe8f76ab5ccf53f5a0c7254975d49c45d51dde6a94ff7f5993223f56cd19f",
+        "hash": "f86fab50da0c1466cb2ccedef0aa9cc9390533c1dec18ea6a0385805d7319b27"
+    },
+    {
+        "index": 102,
+        "timestamp": "2025-12-11 15:04:01.080146",
+        "data": {
+            "user_id": 7,
+            "action": "FIREBASE_LOGIN",
+            "details": "User logged in via Google"
+        },
+        "previous_hash": "f86fab50da0c1466cb2ccedef0aa9cc9390533c1dec18ea6a0385805d7319b27",
+        "hash": "d994234ff5c9536d0174baae822cf508b27273266cdb02ce9f3efb75b197d58e"
+    },
+    {
+        "index": 103,
+        "timestamp": "2025-12-11 15:04:16.123505",
+        "data": {
+            "user_id": 7,
+            "action": "CHAT_QUERY",
+            "details": "User sent a message"
+        },
+        "previous_hash": "d994234ff5c9536d0174baae822cf508b27273266cdb02ce9f3efb75b197d58e",
+        "hash": "8ad6efa9489274d350f68295a6b2d3f8685e7cabb671cf715ff1144ae2973194"
     }
 ]

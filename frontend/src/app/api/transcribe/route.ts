@@ -4,7 +4,7 @@ export async function POST(req: Request) {
   // Forward FormData directly to backend
   const form = await req.formData();
 
-  const backendUrl = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || "http://127.0.0.1:8000";
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || "http://localhost:8000";
   const target = `${backendUrl}/transcribe`;
 
   // forward the formdata; the Fetch API accepts FormData directly

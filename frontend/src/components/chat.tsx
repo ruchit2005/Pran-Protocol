@@ -19,7 +19,7 @@ type Message = {
 };
 
 type Session = {
-  id: number;
+  id: string;  // Changed from number to match MongoDB ObjectId
   title: string;
   created_at: string;
 };
@@ -143,7 +143,7 @@ export default function HealthcareChat() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<{
     email: string;
     display_name?: string;
@@ -214,14 +214,15 @@ export default function HealthcareChat() {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        setSessions(await res.json());
+        const data = await res.json();
+        setSessions(data.sessions || []);
       }
     } catch (err) {
       console.error("Failed to fetch sessions", err);
     }
   };
 
-  const loadSession = async (sessionId: number) => {
+  const loadSession = async (sessionId: string) => {
     const token = localStorage.getItem("token");
     if (!token) return;
 
@@ -233,15 +234,21 @@ export default function HealthcareChat() {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        const history = await res.json();
+        const data = await res.json();
+        const history = data.messages || [];
         const uiMessages = history.map((msg: any) => {
           let content = msg.content;
           if (msg.role === 'assistant') {
-            try {
-              if (content.trim().startsWith('{')) {
-                content = formatResponse(JSON.parse(content));
-              } else {
-                // Render markdown for plain string responses
+            // Assistant messages are stored as full result objects
+            if (typeof content === 'object' && content !== null) {
+              content = formatResponse(content);
+            } else if (typeof content === 'string') {
+              try {
+                // Try parsing if it's a JSON string
+                const parsed = JSON.parse(content);
+                content = formatResponse(parsed);
+              } catch (e) {
+                // Plain text - render as markdown
                 content = (
                   <div className="prose prose-stone max-w-none">
                     <ReactMarkdown
@@ -262,7 +269,7 @@ export default function HealthcareChat() {
                   </div>
                 );
               }
-            } catch (e) { /* keep string */ }
+            }
           }
           return { role: msg.role, content, rawContent: msg.content };
         });
@@ -326,7 +333,14 @@ export default function HealthcareChat() {
 
       const data = await response.json();
 
-      if (!currentSessionId) fetchSessions(token!);
+      // Update session ID if new session was created
+      if (data.session_id) {
+        if (!currentSessionId) {
+          // New session created - update state and refresh sessions list
+          setCurrentSessionId(data.session_id);
+          fetchSessions(token!);
+        }
+      }
 
       const assistantMessage: Message = {
         role: 'assistant',
@@ -458,7 +472,7 @@ export default function HealthcareChat() {
           {/* Session List */}
           <div className="flex-1 overflow-y-auto px-4 py-2 space-y-2 scrollbar-thin scrollbar-thumb-white/20">
             <h3 className="text-xs font-semibold text-emerald-200/70 uppercase tracking-widest mb-2 px-2">History</h3>
-            {sessions.map((session) => (
+            {(Array.isArray(sessions) ? sessions : []).map((session) => (
               <button
                 key={session.id}
                 onClick={() => loadSession(session.id)}
