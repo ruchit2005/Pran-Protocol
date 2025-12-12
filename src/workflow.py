@@ -62,6 +62,19 @@ class HealthcareWorkflow:
     async def run(self, user_input: str, query_for_classification: str, user_profile: Any = None) -> Dict[str, Any]:
         """Execute the workflow"""
         
+        # [OPTIMIZATION] Fast Path for Greetings (Saves 2 LLM calls)
+        # Check if it's a simple greeting or casual remark
+        casual_intents = ["hello", "hi", "hey", "namaste", "greetings", "good morning", "good evening", "thank", "thanks"]
+        lower_input = user_input.lower().strip()
+        
+        # Exact match or starts/ends with casual words (simple heuristic)
+        is_casual = lower_input in casual_intents or \
+                   (len(lower_input.split()) < 4 and any(w in lower_input for w in casual_intents))
+                   
+        if is_casual:
+            print(f"⚡ [FAST PATH] Detected casual conversation. Skipping LLM rails.")
+            return await self._execute_single_agent(user_input, "general_conversation", {"reasoning": "Fast path detection"})
+            
         # Step 0: Profile Extraction (Background)
         profile_update = None
         if user_profile:

@@ -30,10 +30,11 @@ interface ChatResponse {
   intent?: string;
   output?: string | { message: string; emergency?: boolean };
   yoga_videos?: Array<{ title: string; url: string; thumbnail?: string }>;
+  yoga_recommendations?: string;
 }
 
 const formatResponse = (response: ChatResponse): React.ReactNode => {
-  const { intent, output, yoga_videos } = response;
+  const { intent, output, yoga_videos, yoga_recommendations } = response;
 
   const renderContent = (content: string | { message: string; emergency?: boolean } | unknown) => {
     if (typeof content === 'string') {

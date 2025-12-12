@@ -23,7 +23,7 @@ tavily-python==0.7.12
 python-jose[cryptography]==3.5.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
-firebase-admin==6.5.0
+firebase-admin==7.1.0
 
 # HTTP & Utilities
 requests==2.32.3
@@ -37,13 +37,13 @@ sentence-transformers>=3.3.1
 
 # MongoDB & Database
 pymongo==4.6.1
-motor==3.3.2
+motor>=3.4.0
 
 # Encryption & Security
 cryptography==41.0.7
 
 # Blockchain
-web3==6.11.3
+web3>=7.0.0
 eth-account==0.10.0
 eth-utils==2.3.1
 py-solc-x==2.0.3

@@ -46,6 +46,7 @@ class IntentClassifierChain:
     
     def __init__(self, llm):
         self.llm = llm
+        self._cache = {} # Simple in-memory cache
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an intent classifier for a healthcare system. Analyze user queries and identify ALL relevant domains.
 
@@ -92,8 +93,19 @@ Return JSON:
         self.chain = self.prompt | self.llm | JsonOutputParser()
     
     def run(self, user_input: str) -> Dict[str, Any]:
+        # Check cache
+        if user_input in self._cache:
+            print(f"      ⚡ IntentClassifier: Cache hit for '{user_input[:20]}...'")
+            return self._cache[user_input]
+            
         print(f"      → IntentClassifier: Analyzing query...")
         result = self.chain.invoke({"input": user_input})
+        
+        # Update cache (limit size to 100)
+        if len(self._cache) > 100:
+            self._cache.pop(next(iter(self._cache)))
+        self._cache[user_input] = result
+        
         primary = result.get('primary_intent', 'unknown')
         is_multi = result.get('is_multi_domain', False)
         intents = result.get('all_intents', [])

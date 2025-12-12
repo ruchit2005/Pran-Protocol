@@ -13,6 +13,7 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 import logging
 import json
+import asyncio
 from contextlib import asynccontextmanager
 
 # MongoDB imports
@@ -150,12 +151,39 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     return user
     return user
 
+async def background_blockchain_log(log_id: ObjectId, user_id: ObjectId, action: str, resource_type: str, resource_id: Optional[ObjectId]):
+    """Background task to log to blockchain and update MongoDB"""
+    try:
+        if blockchain_logger.enabled:
+            blockchain_result = await blockchain_logger.log_action(
+                str(user_id),
+                action,
+                {"resource_type": resource_type, "resource_id": str(resource_id)}
+            )
+            if blockchain_result:
+                await mongodb_manager.db.audit_logs.update_one(
+                    {"_id": log_id},
+                    {
+                        "$set": {
+                            "blockchain_proof": {
+                                "tx_hash": blockchain_result["tx_hash"],
+                                "block_number": blockchain_result["block_number"],
+                                "verified": True
+                            },
+                            "blockchain_status": "verified"
+                        }
+                    }
+                )
+                logger.info(f"✅ Blockchain audit confirmed for log {log_id}")
+    except Exception as e:
+        logger.error(f"❌ Background blockchain logging failed: {e}")
+
 async def log_audit(user_id: ObjectId, action: str, resource_type: str, resource_id: Optional[ObjectId], request: Request):
-    """Log action to audit log and blockchain"""
+    """Log action to audit log and blockchain (asynchronous)"""
     ip_address = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "unknown")
     
-    # Create audit log
+    # Create audit log with pending status
     audit_log = {
         "user_id": user_id,
         "action": action,
@@ -164,28 +192,19 @@ async def log_audit(user_id: ObjectId, action: str, resource_type: str, resource
         "timestamp": datetime.utcnow(),
         "ip_address_hashed": encryption_manager.hash_for_audit(ip_address),
         "user_agent": user_agent,
-        "result": "success"
+        "result": "success",
+        "blockchain_status": "pending"
     }
     
-    # Log to blockchain (async)
-    if blockchain_logger.enabled:
-        try:
-            blockchain_result = await blockchain_logger.log_action(
-                str(user_id),
-                action,
-                {"resource_type": resource_type, "resource_id": str(resource_id)}
-            )
-            if blockchain_result:
-                audit_log["blockchain_proof"] = {
-                    "tx_hash": blockchain_result["tx_hash"],
-                    "block_number": blockchain_result["block_number"],
-                    "verified": True
-                }
-        except Exception as e:
-            logger.error(f"Blockchain logging failed: {e}")
+    # Store in MongoDB FIRST (Fast)
+    result = await mongodb_manager.db.audit_logs.insert_one(audit_log)
     
-    # Store in MongoDB
-    await mongodb_manager.db.audit_logs.insert_one(audit_log)
+    # Fire and forget blockchain logging
+    if blockchain_logger.enabled:
+        asyncio.create_task(background_blockchain_log(
+            result.inserted_id, user_id, action, resource_type, resource_id
+        ))
+
 
 # Authentication Endpoints
 @app.post("/auth/signup", response_model=Token)
