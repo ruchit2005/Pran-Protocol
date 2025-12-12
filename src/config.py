@@ -48,21 +48,36 @@ class HealthcareConfig:
         # 3. Initialize Domain-Specific RAG Systems
         print("   -> Initializing Domain-Specific RAG Systems...")
         print(f"   -> Using vector store: {settings.VECTOR_STORE_TYPE.upper()}")
+        
+        # ⚡ OPTIMIZATION: Create shared embedding manager once
+        from src.embeddings.embedding_manager import EmbeddingManager
+        from src.retrieval.reranker import Reranker
+        print("   -> Loading shared embedding model (all-MiniLM-L6-v2)...")
+        shared_embedding_manager = EmbeddingManager()
+        print("   -> Loading shared reranker (ms-marco-MiniLM-L-6-v2)...")
+        shared_reranker = Reranker()
+        print("   ✓ Shared models loaded")
+        
         self.rag_retrievers: Dict[str, Retriever] = {}
         self.vector_stores: Dict[str, VectorStore] = {}
         
         try:
-            # Create retrievers for each domain
+            # Create retrievers for each domain (sharing models)
             for domain, collection_name in settings.COLLECTION_NAMES.items():
                 try:
-                    vector_store = VectorStore(collection_name=collection_name)
+                    # Pass shared embedding manager to vector store
+                    vector_store = VectorStore(
+                        collection_name=collection_name,
+                        embedding_manager=shared_embedding_manager
+                    )
                     self.vector_stores[domain] = vector_store
                     
-                    # Create retriever with strategist enabled
+                    # Create retriever with shared reranker
                     retriever = Retriever(
                         vector_store, 
                         use_reranking=True, 
-                        use_strategist=True
+                        use_strategist=True,
+                        shared_reranker=shared_reranker
                     )
                     self.rag_retrievers[domain] = retriever
                     print(f"   ✓ {domain} RAG system ready (collection: {collection_name})")
@@ -72,12 +87,13 @@ class HealthcareConfig:
             # Fallback to general retriever
             if not self.rag_retrievers:
                 print("   -> Creating fallback general RAG system...")
-                vector_store = VectorStore()
+                vector_store = VectorStore(embedding_manager=shared_embedding_manager)
                 self.vector_stores['general'] = vector_store
                 self.rag_retrievers['general'] = Retriever(
                     vector_store,
                     use_reranking=True,
-                    use_strategist=True
+                    use_strategist=True,
+                    shared_reranker=shared_reranker
                 )
             
             # Keep legacy rag_retriever for backward compatibility

@@ -50,6 +50,14 @@ async def lifespan(app: FastAPI):
     logger.info(f"✅ SECRET_KEY loaded: {secret_key[:10]}...")
     
     await mongodb_manager.connect()
+    
+    # Create indexes for user_profiles collection
+    try:
+        await mongodb_manager.db.user_profiles.create_index("user_id", unique=True)
+        logger.info("✅ Created user_profiles indexes")
+    except Exception as e:
+        logger.warning(f"Index creation: {e}")
+    
     logger.info("✅ Application started successfully")
     yield
     # Shutdown
@@ -76,9 +84,14 @@ app.add_middleware(
 # OAuth2
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-# Initialize workflow (keep existing)
+# Initialize workflow
 config = HealthcareConfig()
 workflow = HealthcareWorkflow(config)
+
+# Audio cache directory for TTS
+AUDIO_DIR = os.path.join(os.getcwd(), "audio_cache")
+os.makedirs(AUDIO_DIR, exist_ok=True)
+logger.info(f"✅ Audio directory ready: {AUDIO_DIR}")
 
 # Pydantic Models
 class Token(BaseModel):
@@ -418,7 +431,7 @@ async def chat(
     current_user: dict = Depends(get_current_user),
     req: Request = None
 ):
-    """Process chat message with MongoDB storage"""
+    """Process chat message with MongoDB storage, user profile, and history context"""
     try:
         user_id = current_user["_id"]
         user_salt = current_user["encryption_key_id"]
@@ -442,6 +455,56 @@ async def chat(
             session = await mongodb_manager.db.sessions.find_one({"_id": result.inserted_id})
         
         session_id = session["_id"]
+        
+        # --- USER PROFILE INTEGRATION ---
+        # Fetch or create user profile
+        user_profile = await mongodb_manager.db.user_profiles.find_one({"user_id": user_id})
+        
+        if not user_profile:
+            # Create empty profile
+            profile_doc = {
+                "user_id": user_id,
+                "age": None,
+                "gender": None,
+                "medical_history": "[]",
+                "allergies": "[]",
+                "medications": "[]",
+                "language_preference": "en",
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
+            }
+            await mongodb_manager.db.user_profiles.insert_one(profile_doc)
+            user_profile = await mongodb_manager.db.user_profiles.find_one({"user_id": user_id})
+        
+        # Build profile context
+        profile_context = f"""
+User Profile:
+- Age: {user_profile.get('age') or 'Unknown'}
+- Gender: {user_profile.get('gender') or 'Unknown'}
+- Medical Conditions: {user_profile.get('medical_history') or 'None'}
+- Allergies: {user_profile.get('allergies') or 'None'}
+- Current Medications: {user_profile.get('medications') or 'None'}
+"""
+        
+        # --- CHAT HISTORY INTEGRATION ---
+        # Fetch last 5 messages from this session
+        history_msgs = await mongodb_manager.db.messages.find(
+            {"session_id": session_id}
+        ).sort("timestamp", 1).to_list(length=None)
+        
+        history_context = ""
+        if history_msgs:
+            history_context += "\n\nPrevious conversation:\n"
+            for i, msg in enumerate(history_msgs[-5:], 1):
+                role = msg.get("role", "unknown")
+                content = msg.get("content")
+                # Handle content that might be a dict
+                if isinstance(content, dict):
+                    content = content.get("output", str(content))
+                history_context += f"{i}. {role.capitalize()}: {content}\n"
+        
+        # Combine context
+        full_context_query = f"{profile_context}\n{history_context}\nUser Query: {request.query}"
         
         # Store user message (plain text)
         user_msg_doc = {
@@ -468,18 +531,76 @@ async def chat(
             except Exception as e:
                 logger.warning(f"Blockchain logging failed: {e}")
         
-        # Process with healthcare workflow (use global instance)
+        # Process with healthcare workflow WITH CONTEXT
         result = await workflow.run(
             user_input=request.query,
-            query_for_classification=request.query  # Can add history context if needed
+            query_for_classification=full_context_query,  # Pass full context
+            user_profile=user_profile  # Pass profile for potential updates
         )
         
-        # Store assistant response (plain text) - store full result as JSON
+        # Check if workflow updated the profile
+        if result.get("profile_updated"):
+            await mongodb_manager.db.user_profiles.update_one(
+                {"user_id": user_id},
+                {"$set": {
+                    "age": user_profile.get("age"),
+                    "gender": user_profile.get("gender"),
+                    "medical_history": user_profile.get("medical_history"),
+                    "allergies": user_profile.get("allergies"),
+                    "medications": user_profile.get("medications"),
+                    "updated_at": datetime.utcnow()
+                }}
+            )
+            logger.info(f"Updated user profile for {user_id}")
+        
+        # --- TTS AUDIO GENERATION (if requested) ---
+        audio_url = None
+        if request.generate_audio:
+            from openai import OpenAI
+            import hashlib
+            
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            
+            # Get text to speak
+            raw_output = result.get("output") if isinstance(result, dict) else result
+            tts_input = raw_output if isinstance(raw_output, str) else str(raw_output)
+            
+            # Create cache filename
+            text_hash = hashlib.md5(tts_input.encode("utf-8")).hexdigest()
+            filename = f"{text_hash}.mp3"
+            tts_path = os.path.join(AUDIO_DIR, filename)
+            
+            # Generate if not cached
+            if not os.path.exists(tts_path):
+                logger.info(f"Generating TTS for session {session_id}")
+                try:
+                    speech = client.audio.speech.create(
+                        model="tts-1",
+                        voice="alloy",
+                        input=tts_input[:4096],
+                        response_format="mp3"
+                    )
+                    with open(tts_path, "wb") as f:
+                        f.write(speech.read())
+                    logger.info(f"TTS generated: {filename}")
+                except Exception as e:
+                    logger.error(f"TTS generation failed: {e}")
+            else:
+                logger.info(f"TTS cache hit: {filename}")
+            
+            base_url = os.getenv("FRONTEND_BASE_URL", "http://127.0.0.1:8000")
+            audio_url = f"{base_url}/audio/{filename}"
+        
+        # Store assistant response
+        assistant_content = str(result.get("output", ""))
+        if not assistant_content:
+            assistant_content = str(result)
+        
         assistant_msg_doc = {
             "session_id": session_id,
             "user_id": user_id,
             "role": "assistant",
-            "content": result,
+            "content": assistant_content,
             "intent": result.get("intent"),
             "timestamp": datetime.utcnow(),
             "ip_address": req.client.host if req else "unknown",
@@ -502,12 +623,12 @@ async def chat(
             request=req
         )
         
-        # Return full workflow result with added metadata
+        # Return full workflow result with metadata
         return {
-            **result,  # Includes: intent, output, yoga_recommendations, yoga_videos, etc.
+            **result,
             "session_id": str(session_id),
             "timestamp": datetime.utcnow().isoformat(),
-            "audio_url": None  # Add TTS integration if needed
+            "audio_url": audio_url
         }
         
     except HTTPException:
@@ -649,7 +770,28 @@ async def transcribe_audio(
         os.unlink(audio_path)
         
         return {"text": text, "language": language}
-        
+    
     except Exception as e:
         logger.error(f"Transcription error: {e}", exc_info=True)
+        if os.path.exists(audio_path):
+            os.unlink(audio_path)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# -------------------------------------------------------
+# TTS AUDIO ENDPOINT
+# -------------------------------------------------------
+@app.get("/audio/{filename}")
+async def serve_audio(filename: str):
+    """Serve generated TTS audio files"""
+    from fastapi.responses import FileResponse
+    
+    file_path = os.path.join(AUDIO_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    
+    return FileResponse(
+        file_path,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "public, max-age=3600"}
+    )

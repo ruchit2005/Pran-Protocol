@@ -28,6 +28,9 @@ class HealthcareWorkflow:
     def __init__(self, config: HealthcareConfig):
         self.config = config
         
+        # Query optimization cache (per-request)
+        self._query_optimization_cache = {}
+        
         # Initialize core chains
         self.guardrail = GuardrailChain(config.llm)
         self.classifier = IntentClassifierChain(config.llm)
@@ -48,6 +51,11 @@ class HealthcareWorkflow:
         schemes_retriever = config.get_retriever('government_schemes') or config.rag_retriever
         mental_wellness_retriever = config.get_retriever('mental_wellness') or config.rag_retriever
         
+        # Inject shared cache into retrievers to prevent duplicate optimizations
+        for retriever in [yoga_retriever, ayush_retriever, schemes_retriever, mental_wellness_retriever]:
+            if retriever:
+                retriever._query_cache = self._query_optimization_cache
+        
         # RAG-only agents (no web search for medical advice)
         self.ayush_chain = AyushChain(config.llm, ayush_retriever)
         self.yoga_chain = YogaChain(config.llm, yoga_retriever)
@@ -61,6 +69,9 @@ class HealthcareWorkflow:
 
     async def run(self, user_input: str, query_for_classification: str, user_profile: Any = None) -> Dict[str, Any]:
         """Execute the workflow"""
+        
+        # Clear query optimization cache for new request
+        self._query_optimization_cache.clear()
         
         # [OPTIMIZATION] Fast Path for Greetings (Saves 2 LLM calls)
         # Check if it's a simple greeting or casual remark
@@ -126,7 +137,10 @@ class HealthcareWorkflow:
                 print(f"      - {intent_obj['intent']} (confidence: {intent_obj['confidence']:.2f})")
         print()
         
-        # Step 3: Execute agent(s)
+        # Step 3: Pre-optimize query once for all agents (cache it)
+        self._preoptimize_query(user_input)
+        
+        # Step 4: Execute agent(s)
         if is_multi_domain and len(all_intents) > 1:
             # Multi-agent execution with fusion
             result = await self._execute_multi_agent(user_input, all_intents, classification)
@@ -134,12 +148,12 @@ class HealthcareWorkflow:
             # Single agent execution (legacy path)
             result = await self._execute_single_agent(user_input, primary_intent, classification)
         
-        # Step 4: Validate Medical Advice
+        # Step 5: Validate Medical Advice
         intent_to_check = result.get("intent")
         output_content = result.get("output")
         if intent_to_check in ["symptom_checker", "ayush_support", "health_advisory"] or (isinstance(output_content, str) and "symptom" in output_content.lower()):
              if isinstance(output_content, str):
-                print("🩺 [STEP 4/4] Validating Medical Advice...")
+                print("🩺 [STEP 5/5] Validating Medical Advice...")
                 validation = self.validator.validate(user_input, output_content)
                 if not validation.get("is_safe", True):
                     print(f"   ⚠️ Unsafe content detected: {validation.get('reason')}")
@@ -153,6 +167,27 @@ class HealthcareWorkflow:
 
         print("   ✓ Workflow execution complete\n")
         return result
+    
+    def _preoptimize_query(self, query: str) -> None:
+        """Pre-optimize query once and cache it for all retrievers to use."""
+        if query in self._query_optimization_cache:
+            return  # Already optimized
+        
+        # Access any retriever's query optimizer (they all share the same LLM)
+        retriever = self.config.get_retriever('yoga') or self.config.rag_retriever
+        if retriever and hasattr(retriever, 'query_optimizer') and retriever.query_optimizer:
+            optimizer = retriever.query_optimizer
+            if optimizer.enabled:
+                optimized = optimizer.optimize_query(query)
+                self._query_optimization_cache[query] = optimized
+                if optimized != query:
+                    print(f"💾 [CACHE] Query optimized and cached: '{query}' -> '{optimized}'")
+                else:
+                    print(f"💾 [CACHE] Query cached as-is (no optimization needed): '{query}'")
+    
+    def get_optimized_query(self, query: str) -> str:
+        """Get cached optimized query if available."""
+        return self._query_optimization_cache.get(query, query)
     
     async def _execute_single_agent(self, user_input: str, intent: str, classification: Dict) -> Dict[str, Any]:
         """Execute a single agent (legacy behavior)"""

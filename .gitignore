@@ -247,3 +247,6 @@ audio_cache/
 # Data directories
 data/
 logs/
+
+
+DONT_LOOK/

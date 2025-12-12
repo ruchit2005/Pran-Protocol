@@ -14,7 +14,8 @@ class Retriever:
                  use_reranking: bool = None,
                  use_query_optimization: bool = True,
                  use_gatekeeper: bool = False,
-                 use_strategist: bool = True):
+                 use_strategist: bool = True,
+                 shared_reranker: Optional[Reranker] = None):
         """
         Initialize retriever with advanced agentic features.
         
@@ -24,10 +25,14 @@ class Retriever:
             use_query_optimization: Whether to optimize queries before search
             use_gatekeeper: Whether to validate query clarity
             use_strategist: Whether to use intelligent strategy selection
+            shared_reranker: Optional shared reranker instance to avoid loading multiple models
         """
         self.vector_store = vector_store
         self.chroma_manager = vector_store  # Backward compatibility alias
         self.use_reranking = use_reranking if use_reranking is not None else settings.USE_RERANKING
+        
+        # Query optimization cache (shared across retrievers via workflow)
+        self._query_cache = None
         
         # Initialize advanced agentic components
         # Pass embedding manager into QueryOptimizer for verification to prevent query drift
@@ -36,9 +41,14 @@ class Retriever:
         self.auditor = Auditor()
         self.strategist = Strategist() if use_strategist else None
         
+        # Use shared reranker if provided, otherwise create new one
         if self.use_reranking:
-            self.reranker = Reranker()
-            logger.info("Retriever initialized with reranking")
+            if shared_reranker:
+                self.reranker = shared_reranker
+                logger.info("Retriever initialized with shared reranker")
+            else:
+                self.reranker = Reranker()
+                logger.info("Retriever initialized with new reranker")
         else:
             self.reranker = None
             logger.info("Retriever initialized without reranking")
@@ -97,12 +107,21 @@ class Retriever:
                     'clarification': clarity_check['clarification']
                 }
         
-        # Step 2: Query optimization
+        # Step 2: Query optimization (use cache if available)
         search_query = query
         if self.query_optimizer and self.query_optimizer.enabled:
-            search_query = self.query_optimizer.optimize_query(query)
-            metadata['optimized_query'] = search_query
-            logger.info(f"Optimized: '{query}' -> '{search_query}'")
+            # Check if query is already cached (prevents duplicate optimization)
+            if self._query_cache and query in self._query_cache:
+                search_query = self._query_cache[query]
+                metadata['optimized_query'] = search_query
+                logger.info(f"[CACHE HIT] Using cached optimized query: '{query}' -> '{search_query}'")
+            else:
+                search_query = self.query_optimizer.optimize_query(query)
+                metadata['optimized_query'] = search_query
+                logger.info(f"Optimized: '{query}' -> '{search_query}'")
+                # Cache it for future use in this request
+                if self._query_cache is not None:
+                    self._query_cache[query] = search_query
         
         # Step 3: Strategist decides retrieval method
         if self.strategist and strategy is None:

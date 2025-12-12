@@ -86,6 +86,24 @@ class BlockchainProof(BaseModel):
     verified: bool
 
 
+class UserProfileMongo(BaseModel):
+    """User health profile for personalized recommendations"""
+    id: Optional[PyObjectId] = Field(default_factory=ObjectId, alias="_id")
+    user_id: PyObjectId
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    medical_history: str = "[]"  # JSON string of conditions
+    allergies: str = "[]"         # JSON string of allergies
+    medications: str = "[]"       # JSON string of current medications
+    language_preference: str = "en"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
+
+
 class AuditLogMongo(BaseModel):
     """Comprehensive audit log"""
     id: Optional[PyObjectId] = Field(default_factory=ObjectId, alias="_id")
