@@ -64,31 +64,27 @@ class BlockchainAuditLogger:
     
     def _load_contract_abi(self) -> list:
         """Load smart contract ABI"""
-        # This would load from a JSON file in production
-        # For now, minimal ABI for the audit contract
+        # Event-based audit contract ABI
         return [
             {
+                "anonymous": False,
                 "inputs": [
-                    {"internalType": "string", "name": "action", "type": "string"},
-                    {"internalType": "bytes32", "name": "dataHash", "type": "bytes32"}
+                    {"indexed": True, "name": "user", "type": "address"},
+                    {"indexed": False, "name": "action", "type": "string"},
+                    {"indexed": False, "name": "dataHash", "type": "bytes32"},
+                    {"indexed": False, "name": "timestamp", "type": "uint256"}
                 ],
-                "name": "createRecord",
-                "outputs": [
-                    {"internalType": "bytes32", "name": "", "type": "bytes32"}
-                ],
-                "stateMutability": "nonpayable",
-                "type": "function"
+                "name": "AuditLog",
+                "type": "event"
             },
             {
                 "inputs": [
-                    {"internalType": "bytes32", "name": "recordId", "type": "bytes32"},
-                    {"internalType": "bytes32", "name": "dataHash", "type": "bytes32"}
+                    {"name": "action", "type": "string"},
+                    {"name": "dataHash", "type": "bytes32"}
                 ],
-                "name": "verifyRecord",
-                "outputs": [
-                    {"internalType": "bool", "name": "", "type": "bool"}
-                ],
-                "stateMutability": "view",
+                "name": "logAudit",
+                "outputs": [],
+                "stateMutability": "nonpayable",
                 "type": "function"
             }
         ]
@@ -130,13 +126,13 @@ class BlockchainAuditLogger:
             data_hash_bytes = bytes.fromhex(data_hash)
             
             # Build transaction
-            tx = self.contract.functions.createRecord(
+            tx = self.contract.functions.logAudit(
                 action,
                 data_hash_bytes
             ).build_transaction({
                 'from': self.account.address,
                 'nonce': self.w3.eth.get_transaction_count(self.account.address),
-                'gas': 200000,
+                'gas': 500000,  # Increased from 200,000 to handle complex contracts
                 'gasPrice': self.w3.eth.gas_price
             })
             

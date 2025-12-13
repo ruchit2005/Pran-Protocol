@@ -516,6 +516,17 @@ export default function HealthcareChat() {
               My Profile
             </button>
 
+            {/* NEW: Blockchain Audit Button */}
+            <button
+              onClick={() => router.push('/blockchain')}
+              className="w-full flex items-center gap-3 text-stone-300 hover:text-white hover:bg-white/10 px-4 py-3 rounded-lg transition-colors text-sm font-medium"
+            >
+              <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
+                🔗
+              </div>
+              Blockchain Audit
+            </button>
+
             {/* Logout Button */}
             <button
               onClick={handleLogout}

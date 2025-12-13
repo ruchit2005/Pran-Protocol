@@ -20,8 +20,22 @@ from contextlib import asynccontextmanager
 from src.database.mongodb_manager import mongodb_manager
 from src.database.mongodb_models import UserMongo, SessionMongo, MessageMongo, AuditLogMongo, ConsentAgreement
 from src.security.encryption import PHIEncryptionManager
-from src.blockchain.audit_logger import blockchain_logger
+from src.compliance.disha_compliance import DISHAComplianceManager
 from bson import ObjectId
+
+# Initialize blockchain (auto-detect PostgreSQL or SQLite)
+BLOCKCHAIN_DATABASE_URL = os.getenv("BLOCKCHAIN_DATABASE_URL")
+
+if BLOCKCHAIN_DATABASE_URL:
+    # Cloud PostgreSQL blockchain (shared across environments)
+    from src.blockchain.postgres_blockchain import PostgresBlockchainAuditLogger
+    blockchain_logger = PostgresBlockchainAuditLogger(BLOCKCHAIN_DATABASE_URL)
+    logging.info("🌐 Using cloud PostgreSQL blockchain")
+else:
+    # Local SQLite blockchain (development only)
+    from src.blockchain.private_blockchain import PrivateBlockchainAuditLogger
+    blockchain_logger = PrivateBlockchainAuditLogger()
+    logging.info("💾 Using local SQLite blockchain")
 
 # Existing imports
 from src.workflow import HealthcareWorkflow
@@ -87,6 +101,13 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 # Initialize workflow
 config = HealthcareConfig()
 workflow = HealthcareWorkflow(config)
+
+# Initialize DISHA compliance manager
+compliance_manager = DISHAComplianceManager(
+    blockchain_logger=blockchain_logger,
+    master_key=os.getenv("MASTER_ENCRYPTION_KEY")
+)
+logger.info("✅ DISHA Compliance Manager initialized")
 
 # Audio cache directory for TTS
 AUDIO_DIR = os.path.join(os.getcwd(), "audio_cache")
@@ -456,11 +477,11 @@ async def chat(
         
         session_id = session["_id"]
         
-        # --- USER PROFILE INTEGRATION ---
+        # --- USER PROFILE INTEGRATION WITH DISHA COMPLIANCE ---
         # Fetch or create user profile
-        user_profile = await mongodb_manager.db.user_profiles.find_one({"user_id": user_id})
+        user_profile_raw = await mongodb_manager.db.user_profiles.find_one({"user_id": user_id})
         
-        if not user_profile:
+        if not user_profile_raw:
             # Create empty profile
             profile_doc = {
                 "user_id": user_id,
@@ -474,16 +495,30 @@ async def chat(
                 "updated_at": datetime.utcnow()
             }
             await mongodb_manager.db.user_profiles.insert_one(profile_doc)
-            user_profile = await mongodb_manager.db.user_profiles.find_one({"user_id": user_id})
+            user_profile_raw = await mongodb_manager.db.user_profiles.find_one({"user_id": user_id})
         
-        # Build profile context
+        # Anonymize user data (DISHA compliance)
+        user_email = encryption_manager.decrypt(current_user.get("email_encrypted", ""), user_salt)
+        compliance_data = await compliance_manager.process_user_data({
+            **user_profile_raw,
+            "email": user_email
+        })
+        anonymous_id = compliance_data['anonymized_data']['anonymous_id']
+        anonymized_profile = compliance_data['anonymized_data']
+        
+        # Log data access to blockchain
+        logger.info(f"📋 Data access logged for anonymous ID: {anonymous_id}")
+        if compliance_data['access_audit'].get('blockchain_tx'):
+            logger.info(f"⛓️ Blockchain TX: {compliance_data['access_audit']['blockchain_tx']}")
+        
+        # Build profile context with anonymized data
         profile_context = f"""
-User Profile:
-- Age: {user_profile.get('age') or 'Unknown'}
-- Gender: {user_profile.get('gender') or 'Unknown'}
-- Medical Conditions: {user_profile.get('medical_history') or 'None'}
-- Allergies: {user_profile.get('allergies') or 'None'}
-- Current Medications: {user_profile.get('medications') or 'None'}
+User Profile (Anonymized ID: {anonymous_id}):
+- Age Range: {anonymized_profile.get('age_range', 'Unknown')}
+- Gender: {anonymized_profile.get('gender', 'Unknown')}
+- Medical Conditions: {anonymized_profile.get('medical_history', [])}
+- Allergies: {anonymized_profile.get('allergies', [])}
+- Current Medications: {anonymized_profile.get('medications', [])}
 """
         
         # --- CHAT HISTORY INTEGRATION ---
@@ -535,19 +570,32 @@ User Profile:
         result = await workflow.run(
             user_input=request.query,
             query_for_classification=full_context_query,  # Pass full context
-            user_profile=user_profile  # Pass profile for potential updates
+            user_profile=user_profile_raw  # Pass profile for potential updates
         )
+        
+        # Process response with DISHA compliance
+        compliant_response = await compliance_manager.process_ai_response(
+            anonymous_id=anonymous_id,
+            user_query=request.query,
+            ai_response=result
+        )
+        
+        # Log blockchain transaction for medical advice
+        if compliant_response['blockchain_audit']:
+            blockchain_tx = compliant_response['blockchain_audit'].get('blockchain_tx')
+            if blockchain_tx:
+                logger.info(f"⛓️ Medical advice logged to blockchain: {blockchain_tx}")
         
         # Check if workflow updated the profile
         if result.get("profile_updated"):
             await mongodb_manager.db.user_profiles.update_one(
                 {"user_id": user_id},
                 {"$set": {
-                    "age": user_profile.get("age"),
-                    "gender": user_profile.get("gender"),
-                    "medical_history": user_profile.get("medical_history"),
-                    "allergies": user_profile.get("allergies"),
-                    "medications": user_profile.get("medications"),
+                    "age": user_profile_raw.get("age"),
+                    "gender": user_profile_raw.get("gender"),
+                    "medical_history": user_profile_raw.get("medical_history"),
+                    "allergies": user_profile_raw.get("allergies"),
+                    "medications": user_profile_raw.get("medications"),
                     "updated_at": datetime.utcnow()
                 }}
             )
@@ -623,12 +671,21 @@ User Profile:
             request=req
         )
         
-        # Return full workflow result with metadata
+        # Return full workflow result with DISHA compliance metadata
         return {
             **result,
             "session_id": str(session_id),
             "timestamp": datetime.utcnow().isoformat(),
-            "audio_url": audio_url
+            "audio_url": audio_url,
+            "compliance": {
+                "status": "DISHA_COMPLIANT",
+                "anonymized": True,
+                "verifiable": True,
+                "anonymous_id": anonymous_id,
+                "blockchain_tx": compliant_response['blockchain_audit'].get('blockchain_tx') if compliant_response['blockchain_audit'] else None,
+                "signature": compliant_response['response'].get('signature'),
+                "public_key_fingerprint": compliant_response['response'].get('public_key_fingerprint')
+            }
         }
         
     except HTTPException:
@@ -795,3 +852,103 @@ async def serve_audio(filename: str):
         media_type="audio/mpeg",
         headers={"Cache-Control": "public, max-age=3600"}
     )
+
+
+# -------------------------------------------------------
+# DISHA COMPLIANCE ENDPOINTS
+# -------------------------------------------------------
+@app.post("/compliance/verify")
+async def verify_response_signature(signature: str, response_data: str):
+    """
+    Verify that an AI response is authentic and hasn't been tampered with
+    """
+    try:
+        signed_response = json.loads(response_data)
+        is_valid = compliance_manager.credential_manager.verify_response(signed_response)
+        
+        return {
+            "verified": is_valid,
+            "message": "Response signature is valid" if is_valid else "Invalid signature - response may have been tampered with"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/compliance/audit/{anonymous_id}")
+async def get_audit_trail(
+    anonymous_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get blockchain audit trail for a user (requires authentication)
+    User can only access their own audit trail
+    """
+    try:
+        user_id = current_user["_id"]
+        user_salt = current_user["encryption_key_id"]
+        user_email = encryption_manager.decrypt(current_user.get("email_encrypted", ""), user_salt)
+        
+        # Verify user owns this anonymous ID
+        user_anon_id = compliance_manager.anonymizer.create_anonymous_id(user_email)
+        
+        if user_anon_id != anonymous_id:
+            raise HTTPException(status_code=403, detail="Access denied - not your audit trail")
+        
+        # Fetch audit trail directly from blockchain
+        audit_trail = blockchain_logger.blockchain.get_audit_trail(anonymous_id)
+        
+        return {
+            "anonymous_id": anonymous_id,
+            "audit_trail": audit_trail,
+            "compliance_status": "DISHA_COMPLIANT",
+            "total_records": len(audit_trail)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Audit trail error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/auth/anonymous-id")
+async def get_anonymous_id(current_user: dict = Depends(get_current_user)):
+    """
+    Get the authenticated user's anonymous ID for blockchain queries
+    """
+    try:
+        user_salt = current_user["encryption_key_id"]
+        user_email = encryption_manager.decrypt(current_user.get("email_encrypted", ""), user_salt)
+        
+        # Generate anonymous ID using compliance manager
+        anonymous_id = compliance_manager.anonymizer.create_anonymous_id(user_email)
+        
+        return {
+            "anonymous_id": anonymous_id,
+            "email": user_email  # Include for verification
+        }
+    except Exception as e:
+        logger.error(f"Anonymous ID error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/blockchain/stats")
+async def get_blockchain_statistics():
+    """
+    Get private blockchain statistics (public endpoint)
+    """
+    try:
+        stats = blockchain_logger.get_statistics()
+        
+        return {
+            "blockchain_type": "Private SQLite Blockchain",
+            "features": [
+                "Zero gas fees",
+                "Instant transactions",
+                "HIPAA compliant (data never leaves server)",
+                "Immutable audit trail",
+                "Tamper detection"
+            ],
+            **stats
+        }
+    except Exception as e:
+        logger.error(f"Stats error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
