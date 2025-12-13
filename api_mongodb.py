@@ -72,8 +72,21 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Index creation: {e}")
     
+    # Fetch initial health news
+    await fetch_initial_health_news()
+    
+    # Start background task to refresh health news every hour
+    refresh_task = asyncio.create_task(refresh_health_news_periodically())
+    
     logger.info("✅ Application started successfully")
     yield
+    
+    # Cancel background task on shutdown
+    refresh_task.cancel()
+    try:
+        await refresh_task
+    except asyncio.CancelledError:
+        pass
     # Shutdown
     logger.info("🛑 Shutting down application...")
     await mongodb_manager.close()
@@ -101,6 +114,30 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 # Initialize workflow
 config = HealthcareConfig()
 workflow = HealthcareWorkflow(config)
+
+# Background task to refresh health news every hour
+async def refresh_health_news_periodically():
+    """Background task that refreshes health news every hour"""
+    while True:
+        try:
+            await asyncio.sleep(3600)  # Wait 1 hour
+            if hasattr(workflow, 'advisory_chain'):
+                print("🔄 Auto-refreshing health news (hourly)...")
+                await asyncio.to_thread(workflow.advisory_chain.fetch_headlines)
+                print("✅ Health news refreshed")
+        except Exception as e:
+            print(f"⚠️ Auto-refresh failed: {e}")
+
+# Fetch initial health news data on startup (so it's ready immediately)
+async def fetch_initial_health_news():
+    """Fetch health news once on startup"""
+    if hasattr(workflow, 'advisory_chain'):
+        try:
+            print("📰 Fetching initial Uttarakhand health news...")
+            await asyncio.to_thread(workflow.advisory_chain.fetch_headlines)
+            print("✅ Health news loaded and cached")
+        except Exception as e:
+            print(f"⚠️ Initial health news fetch failed: {e}")
 
 # Initialize DISHA compliance manager
 compliance_manager = DISHAComplianceManager(
