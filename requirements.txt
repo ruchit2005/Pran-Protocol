@@ -21,42 +21,29 @@ sentence-transformers>=3.3.1
 huggingface-hub>=0.23.0
 
 # Vector Stores
-pinecone>=5.0.0  # Production cloud vector store
-chromadb==1.2.1  # Optional: Local development only
-# qdrant-client>=1.7.0  # Alternative cloud option
+pinecone>=5.0.0
+chromadb==1.2.1
 
 # Database
-pymongo==4.6.1  # MongoDB driver
-motor==3.3.2     # Async MongoDB
+pymongo==4.6.1
+motor>=3.4.0
 
 # Authentication & Security
-firebase-admin==6.5.0
+firebase-admin==7.1.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
-firebase-admin==7.1.0
-
-# HTTP & Utilities
-requests==2.32.3
 
 # Document Processing
 pypdf==4.3.1
 unstructured==0.15.9
 unstructured-client==0.25.5
 networkx==3.3
-sentence-transformers>=3.3.1
-
-# MongoDB & Database
-pymongo==4.6.1
-motor>=3.4.0
 
 # Encryption & Security
 cryptography==41.0.7
 
 # Blockchain
-web3>=7.0.0
-eth-account==0.10.0
-eth-utils==2.3.1
-py-solc-x==2.0.3
+psycopg2-binary==2.9.9
 
 # HTTP Utilities
 requests==2.32.3
