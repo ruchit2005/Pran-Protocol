@@ -161,8 +161,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     )
     
     try:
-        # Verify Firebase token directly
-        decoded_token = verify_firebase_token(token, clock_skew_seconds=10)
+        # Verify Firebase token directly (run in thread to prevent blocking)
+        decoded_token = await asyncio.to_thread(verify_firebase_token, token, clock_skew_seconds=10)
         if not decoded_token:
             raise credentials_exception
         
@@ -339,8 +339,8 @@ async def firebase_login(request_data: FirebaseLoginRequest, request: Request):
     try:
         from src.auth.firebase_auth import verify_firebase_token
         
-        # Verify Firebase token with 10 seconds clock skew tolerance
-        decoded_token = verify_firebase_token(request_data.id_token, clock_skew_seconds=10)
+        # Verify Firebase token with 10 seconds clock skew tolerance (run in thread)
+        decoded_token = await asyncio.to_thread(verify_firebase_token, request_data.id_token, clock_skew_seconds=10)
         if not decoded_token:
             raise HTTPException(status_code=401, detail="Invalid Firebase token")
         
@@ -693,6 +693,34 @@ User Profile (Anonymized ID: {anonymous_id}):
     except Exception as e:
         logger.error(f"Chat error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+@app.get("/alerts")
+async def get_health_alerts():
+    """Get real-time health alerts to display in the frontend widget"""
+    try:
+        # Access the advisory chain from the workflow
+        if hasattr(workflow, 'advisory_chain'):
+             # Run in thread pool to avoid blocking async loop since requests is sync
+            articles = await asyncio.to_thread(workflow.advisory_chain.fetch_headlines)
+            
+            # Format for frontend
+            alerts = []
+            for a in articles:
+                alerts.append({
+                    "title": a.get("title"),
+                    "url": a.get("url", "#"),
+                    "source": a.get("source", {}).get("name", "Unknown"),
+                    "publishedAt": a.get("publishedAt"),
+                    "description": a.get("description", "")
+                })
+            return {"alerts": alerts}
+        else:
+            return {"alerts": []}
+    except Exception as e:
+        logger.error(f"Alerts fetch error: {e}", exc_info=True)
+        return {"alerts": []}
 
 
 @app.get("/sessions")
