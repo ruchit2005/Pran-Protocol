@@ -1,6 +1,10 @@
+import { NextIntlClientProvider } from 'next-intl';
+import { getMessages } from 'next-intl/server';
+import { notFound } from 'next/navigation';
+import { routing } from '@/i18n/routing';
 import type { Metadata } from "next";
 import { Merriweather, Lato } from "next/font/google";
-import "./globals.css";
+import "../globals.css";
 
 const merriweather = Merriweather({
   weight: ["300", "400", "700", "900"],
@@ -21,17 +25,31 @@ export const metadata: Metadata = {
   description: "Holistic health guidance through Ayurveda and Yoga",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
-}: Readonly<{
+  params
+}: {
   children: React.ReactNode;
-}>) {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+
+  // Ensure that the incoming `locale` is valid
+  if (!routing.locales.includes(locale as any)) {
+    notFound();
+  }
+
+  // Providing all messages to the client
+  const messages = await getMessages();
+
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body
         className={`${merriweather.variable} ${lato.variable} antialiased bg-stone-50 text-stone-800`}
       >
-        {children}
+        <NextIntlClientProvider messages={messages}>
+          {children}
+        </NextIntlClientProvider>
       </body>
     </html>
   );

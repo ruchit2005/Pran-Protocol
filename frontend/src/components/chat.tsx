@@ -11,6 +11,8 @@ import {
 import VoiceRecorder from "./VoiceRecorder";
 import { getValidToken, setupTokenRefresh, onAuthChange } from "@/lib/firebase-client";
 import HealthAlertsWidget from "./HealthAlertsWidget";
+import { useTranslations } from 'next-intl';
+import LanguageSwitcher from './LanguageSwitcher';
 
 // --- Types ---
 type Message = {
@@ -165,6 +167,16 @@ export default function HealthcareChat() {
     photo_url?: string;
   } | null>(null);
 
+  // Translations
+  const t = useTranslations('Chat');
+  const tNav = useTranslations('Navigation');
+  const tHead = useTranslations('Header');
+  const tAlerts = useTranslations('Alerts');
+
+  // File Upload State
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Desktop default open
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -193,7 +205,7 @@ export default function HealthcareChat() {
         router.push("/login");
         return;
       }
-      
+
       // Get fresh token
       const token = await getValidToken();
       if (token) {
@@ -213,7 +225,7 @@ export default function HealthcareChat() {
 
     handleResize(); // Initial check
     window.addEventListener('resize', handleResize);
-    
+
     return () => {
       unsubscribe();
       window.removeEventListener('resize', handleResize);
@@ -229,7 +241,7 @@ export default function HealthcareChat() {
   const fetchUserProfile = async (token?: string) => {
     const validToken = token || await getValidToken();
     if (!validToken) return;
-    
+
     try {
       const res = await fetch("/api/profile", {
         headers: { Authorization: `Bearer ${validToken}` }
@@ -249,7 +261,7 @@ export default function HealthcareChat() {
   const fetchSessions = async (token?: string) => {
     const validToken = token || await getValidToken();
     if (!validToken) return;
-    
+
     try {
       const res = await fetch("/api/sessions", {
         headers: { Authorization: `Bearer ${validToken}` }
@@ -357,7 +369,7 @@ export default function HealthcareChat() {
           return { role: msg.role, content, rawContent: msg.content };
         });
         console.log(`Loaded ${uiMessages.length} messages for session ${sessionId}`);
-        
+
         // Always update - currentSessionId is already set to sessionId at this point
         setMessages(uiMessages);
         sessionMessagesRef.current.set(sessionId, uiMessages);
@@ -386,30 +398,28 @@ export default function HealthcareChat() {
     if (currentSessionId) {
       sessionMessagesRef.current.set(currentSessionId, messages);
     }
-    
+
     // Abort any ongoing session loads
     if (sessionLoadAbortRef.current) {
       sessionLoadAbortRef.current.abort();
       sessionLoadAbortRef.current = null;
     }
-    
+
     // Show warning if there are pending requests
     const hasPendingRequests = pendingRequests.size > 0;
     setShowPendingWarning(hasPendingRequests);
-    
+
     // Reset loading states for new session
     setIsLoading(false);
     isLoadingSessionRef.current = false;
-    
+
     setMessages([{
       role: 'assistant',
       content: (
         <div className="space-y-2">
-          <p className="text-xl font-serif text-primary font-bold">Namaste! 🙏</p>
-          <p className="text-stone-600">I am DeepShiva, your holistic health companion. How can I support your well-being today?</p>
+          <p className="text-xl font-serif text-primary font-bold">{t('greetingTitle')}</p>
+          <p className="text-stone-600">{t('greetingBody')}</p>
         </div>
-
-
       )
     }]);
     setCurrentSessionId(null);
@@ -446,7 +456,7 @@ export default function HealthcareChat() {
     if (!token) {
       setMessages((prev) => [...prev, {
         role: 'assistant',
-        content: 'Session expired. Please log in again.',
+        content: t('sessionExpired'),
         rawContent: 'Session expired.'
       }]);
       setIsLoading(false);
@@ -509,7 +519,7 @@ export default function HealthcareChat() {
         if (currentSessionId === requestSessionId || (!currentSessionId && !requestSessionId)) {
           setMessages((prev) => [...prev, {
             role: 'assistant',
-            content: 'I apologize, but I am having trouble connecting right now. Please try again.',
+            content: t('errorConnection'),
             rawContent: 'Error occurred.'
           }]);
         }
@@ -552,7 +562,7 @@ export default function HealthcareChat() {
 
     const token = await getValidToken();
     if (!token) return;
-    
+
     setIsAudioLoading(index);
 
     try {
@@ -658,13 +668,13 @@ Please provide:
               className="w-full flex items-center justify-center gap-2 bg-[#F2E8CF] hover:bg-white text-[#3A5A40] px-4 py-3 rounded-xl transition-all shadow-md hover:shadow-lg font-bold"
             >
               <Plus className="w-5 h-5" />
-              <span>New Consultation</span>
+              <span>{tNav('newConsultation')}</span>
             </button>
           </div>
 
           {/* Session List */}
           <div className="flex-1 overflow-y-auto px-4 py-2 space-y-2 scrollbar-thin scrollbar-thumb-white/20">
-            <h3 className="text-xs font-semibold text-emerald-200/70 uppercase tracking-widest mb-2 px-2">History</h3>
+            <h3 className="text-xs font-semibold text-emerald-200/70 uppercase tracking-widest mb-2 px-2">{tNav('history')}</h3>
             {(Array.isArray(sessions) ? sessions : []).map((session) => (
               <button
                 key={session.id}
@@ -692,7 +702,7 @@ Please provide:
               <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
                 <User className="w-3 h-3" />
               </div>
-              My Profile
+              {tNav('myProfile')}
             </button>
 
             {/* NEW: Blockchain Audit Button */}
@@ -703,7 +713,7 @@ Please provide:
               <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
                 🔗
               </div>
-              Blockchain Audit
+              {tNav('blockchainAudit')}
             </button>
 
             {/* Logout Button */}
@@ -712,7 +722,7 @@ Please provide:
               className="w-full flex items-center gap-3 text-stone-300 hover:text-red-300 hover:bg-red-500/10 px-4 py-3 rounded-lg transition-colors text-sm font-medium"
             >
               <LogOut className="w-4 h-4" />
-              Sign Out
+              {tNav('signOut')}
             </button>
           </div>
         </div>
@@ -741,20 +751,21 @@ Please provide:
             </button>
 
             <div>
-              <h1 className="font-serif font-bold text-stone-800 text-lg">Holistic Assistant</h1>
+              <h1 className="font-serif font-bold text-stone-800 text-lg">{tHead('title')}</h1>
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-xs text-stone-500 font-medium">Ayurveda & Yoga Intelligence</span>
+                <span className="text-xs text-stone-500 font-medium">{tHead('subtitle')}</span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
             {/* Alerts Toggle */}
+            <LanguageSwitcher />
             <button
               onClick={() => setIsAlertsOpen(true)}
               className="relative p-2 text-stone-500 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
-              title="Health Alerts"
+              title={tAlerts('title')}
             >
               <Bell className="w-5 h-5" />
               <span className="absolute top-1.5 right-2 w-2 h-2 bg-red-500 rounded-full border border-white"></span>

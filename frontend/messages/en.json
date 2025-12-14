@@ -1,0 +1,35 @@
+{
+    "Navigation": {
+        "newConsultation": "New Consultation",
+        "history": "History",
+        "myProfile": "My Profile",
+        "blockchainAudit": "Blockchain Audit",
+        "signOut": "Sign Out"
+    },
+    "Header": {
+        "title": "Holistic Assistant",
+        "subtitle": "Ayurveda & Yoga Intelligence"
+    },
+    "Chat": {
+        "greetingTitle": "Namaste! 🙏",
+        "greetingBody": "I am DeepShiva, your holistic health companion. How can I support your well-being today?",
+        "inputPlaceholder": "Describe your symptoms or ask a health question...",
+        "send": "Send",
+        "sessionExpired": "Session expired. Please log in again.",
+        "errorConnection": "I apologize, but I am having trouble connecting right now. Please try again."
+    },
+    "Alerts": {
+        "title": "Health Alerts"
+    },
+    "Login": {
+        "welcome": "Welcome to DeepShiva",
+        "subtitle": "Your Ayurvedic path to wellness begins here.",
+        "email": "Email Address",
+        "password": "Password",
+        "signIn": "Sign In",
+        "orContinue": "Or continue with",
+        "signInGoogle": "Sign in with Google",
+        "noAccount": "Don't have an account?",
+        "startJourney": "Start your journey"
+    }
+}
