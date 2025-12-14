@@ -4,10 +4,28 @@ Chain implementations for healthcare workflow
 
 from typing import Dict, Any, List
 import json
+import re
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 
 from ..schemas import ClassificationSchema, SymptomCheckerSchema
+
+
+def robust_json_parse(text: str) -> Dict[str, Any]:
+    """Parse JSON with comment removal and error handling"""
+    try:
+        # Remove // comments
+        text = re.sub(r'//.*?(?=\n|$)', '', text)
+        # Remove /* */ comments
+        text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+        # Parse JSON
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        # Try to extract JSON from markdown code blocks
+        match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+        if match:
+            return json.loads(match.group(1))
+        raise e
 
 
 class GuardrailAndIntentChain:
@@ -41,40 +59,49 @@ Examples of SAFE queries:
 - "How to treat wounds" → SAFE (medical inquiry)
 
 **TASK 2: INTENT CLASSIFICATION**
-Identify ALL relevant healthcare domains:
+Use semantic understanding to identify the user's TRUE intent and needs.
 
-Available categories:
-1. **government_scheme_support**: Questions about government health insurance, schemes, subsidies
-2. **mental_wellness_support**: Mental health concerns, stress, anxiety, depression
-3. **ayush_support**: Traditional medicine (Ayurveda, Yoga, Unani, Siddha, Homeopathy, herbal)
-4. **yoga_support**: Specific yoga practices, asanas, pranayama exercises
-5. **symptom_checker**: Reporting symptoms, feeling unwell, health conditions
-6. **facility_locator_support**: Finding hospitals, clinics, doctors nearby
-7. **health_advisory**: Disease outbreaks, health alerts, vaccination info
-8. **medical_calculation**: Dosage calculations, BMI, drip rates
-9. **general_conversation**: Greetings, casual chat, thank you
+Available healthcare domains:
+1. **government_scheme_support**: Financial assistance, insurance, subsidies, government programs
+2. **mental_wellness_support**: Psychological health, emotional wellbeing, stress management
+3. **ayush_support**: Traditional/alternative medicine systems (Ayurveda, herbs, natural remedies)
+4. **yoga_support**: Physical practices, breathing exercises, meditation
+5. **symptom_checker**: Active health concerns requiring assessment or triage
+6. **facility_locator_support**: Finding healthcare providers or facilities
+7. **health_advisory**: Public health information, disease prevention, alerts
+8. **medical_calculation**: Quantitative medical computations
+9. **general_conversation**: Non-medical social interaction
 
-**Guidelines**:
-- Greetings (hi, hello, namaste) → general_conversation
-- Common ailments (cold, cough, headache) → BOTH yoga_support AND ayush_support
-- Return ALL relevant intents with confidence scores (0.0-1.0)
+**Semantic Guidelines**:
+- Understand the USER'S GOAL, not just keywords
+- Distinguish between: asking about a condition vs. having active symptoms
+- Recognize when someone needs urgent assessment vs. ongoing management
+- Multiple relevant domains may apply - return all that genuinely address the query
+- Focus on what would ACTUALLY HELP the user based on their situation
 
-Return JSON:
+**Context Awareness**:
+- Pre-existing condition + management question → Treatment domains (ayush/yoga)
+- Pre-existing condition + financial need → Government schemes
+- New/changing symptoms → Symptom assessment
+- Seeking specific location → Facility locator
+- Social pleasantries within medical context → Ignore and focus on medical need
+
+Return JSON with your semantic analysis:
 {{
   "is_safe": true/false,
   "safety_reason": "brief explanation",
   "safety_category": "jailbreak/pii/harmful/safe",
-  "primary_intent": "main category",
+  "primary_intent": "most relevant domain",
   "all_intents": [
-    {{"intent": "category1", "confidence": 0.9}},
-    {{"intent": "category2", "confidence": 0.7}}
+    {{"intent": "domain", "confidence": 0.0-1.0}}
   ],
   "is_multi_domain": true/false,
-  "reasoning": "brief explanation"
+  "reasoning": "semantic analysis of user's actual need"
 }}"""),
             ("user", "{input}")
         ])
-        self.chain = self.prompt | self.llm | JsonOutputParser()
+        # Use StrOutputParser and manually parse JSON with comment removal
+        self.chain = self.prompt | self.llm | StrOutputParser()
     
     def check_and_classify(self, text: str) -> Dict[str, Any]:
         """Perform safety check AND intent classification in one call"""
@@ -88,8 +115,16 @@ Return JSON:
         
         print(f"      → Combined Safety & Intent Check...")
         try:
-            result = self.chain.invoke({"input": text})
+            raw_output = self.chain.invoke({"input": text})
+            result = robust_json_parse(raw_output)
+            
+            # Log what the LLM detected
             print(f"      ← Safety: {result.get('is_safe', True)}, Intent: {result.get('primary_intent', 'unknown')}")
+            all_intents = result.get('all_intents', [])
+            if len(all_intents) > 1:
+                print(f"      📊 LLM detected {len(all_intents)} intents:")
+                for intent_obj in all_intents:
+                    print(f"         • {intent_obj['intent']} ({intent_obj['confidence']:.2f})")
             
             # Cache the intent part
             self._cache[cache_key] = {

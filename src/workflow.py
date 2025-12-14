@@ -83,19 +83,40 @@ class HealthcareWorkflow:
                 
                 # Update JSON lists
                 def update_json_list(current_json, new_items):
-                    current = json.loads(current_json) if current_json else []
+                    # Handle various input types
+                    if not current_json or current_json == "":
+                        current = []
+                    elif isinstance(current_json, str):
+                        try:
+                            current = json.loads(current_json)
+                        except json.JSONDecodeError:
+                            current = []
+                    elif isinstance(current_json, list):
+                        current = current_json
+                    else:
+                        current = []
+                    
                     if isinstance(new_items, list):
                         for item in new_items:
                             if item not in current:
                                 current.append(item)
                     return json.dumps(current)
 
-                if profile_update.get("new_conditions"):
-                    user_profile.medical_history = update_json_list(user_profile.medical_history, profile_update["new_conditions"])
-                if profile_update.get("new_allergies"):
-                    user_profile.allergies = update_json_list(user_profile.allergies, profile_update["new_allergies"])
-                if profile_update.get("new_medications"):
-                    user_profile.medications = update_json_list(user_profile.medications, profile_update["new_medications"])
+                # Handle both dict and object-based profiles
+                if isinstance(user_profile, dict):
+                    if profile_update.get("new_conditions"):
+                        user_profile["medical_history"] = update_json_list(user_profile.get("medical_history", "[]"), profile_update["new_conditions"])
+                    if profile_update.get("new_allergies"):
+                        user_profile["allergies"] = update_json_list(user_profile.get("allergies", "[]"), profile_update["new_allergies"])
+                    if profile_update.get("new_medications"):
+                        user_profile["medications"] = update_json_list(user_profile.get("medications", "[]"), profile_update["new_medications"])
+                else:
+                    if profile_update.get("new_conditions"):
+                        user_profile.medical_history = update_json_list(user_profile.medical_history, profile_update["new_conditions"])
+                    if profile_update.get("new_allergies"):
+                        user_profile.allergies = update_json_list(user_profile.allergies, profile_update["new_allergies"])
+                    if profile_update.get("new_medications"):
+                        user_profile.medications = update_json_list(user_profile.medications, profile_update["new_medications"])
                     
                 print("   ✓ Profile object updated in memory")
         
@@ -118,6 +139,8 @@ class HealthcareWorkflow:
             print(f"   → Multi-domain query detected: {len(all_intents)} intents")
             for intent_obj in all_intents:
                 print(f"      - {intent_obj['intent']} (confidence: {intent_obj['confidence']:.2f})")
+        else:
+            print(f"   → Single intent detected")
         print()
         
         # Step 3: Pre-optimize query once for all agents (use request-local cache)
@@ -130,7 +153,7 @@ class HealthcareWorkflow:
             result = await self._execute_multi_agent(user_input, all_intents, combined_result, query_cache)
         else:
             # Single agent execution (legacy path)
-            result = await self._execute_single_agent(user_input, primary_intent, combined_result, query_cache)
+            result = await self._execute_single_agent(user_input, primary_intent, combined_result, query_cache, user_profile)
         
         # Step 5: Validate Medical Advice (skip for non-medical intents to save time)
         intent_to_check = result.get("intent")
@@ -181,7 +204,7 @@ class HealthcareWorkflow:
         """Get cached optimized query if available."""
         return query_cache.get(query, query)
     
-    async def _execute_single_agent(self, user_input: str, intent: str, classification: Dict, query_cache: Dict = None) -> Dict[str, Any]:
+    async def _execute_single_agent(self, user_input: str, intent: str, classification: Dict, query_cache: Dict = None, user_profile: Any = None) -> Dict[str, Any]:
         """Execute a single agent (legacy behavior)"""
         if query_cache is None:
             query_cache = {}
@@ -240,7 +263,7 @@ class HealthcareWorkflow:
                 print(f"⚠️ Failed to fetch YouTube videos: {e}")
             
         elif intent == "symptom_checker":
-            result.update(await self._handle_symptoms(user_input))
+            result.update(await self._handle_symptoms(user_input, user_profile))
             
         elif intent == "facility_locator_support":
             result["output"] = self.hospital_chain.run(user_input)
@@ -252,19 +275,15 @@ class HealthcareWorkflow:
         return result
     
     async def _execute_multi_agent(self, user_input: str, all_intents: List[Dict], classification: Dict, query_cache: Dict = None) -> Dict[str, Any]:
-        """Execute multiple agents in parallel and fuse their responses"""
+        """Execute unified retrieval + single generation instead of multiple agents"""
         if query_cache is None:
             query_cache = {}
             
-        print(f"🔗 [STEP 3/4] Executing Multi-Agent Orchestration...")
-        print(f"   → Running {len(all_intents)} agents in parallel...\n")
+        print(f"🔗 [STEP 3/4] Unified Multi-Domain Response Generation...")
         
-        # PRE-OPTIMIZE query ONCE before launching agents (critical for performance)
+        # PRE-OPTIMIZE query ONCE
         self._preoptimize_query(user_input, query_cache)
-        
-        # Inject cache into all retrievers so they use the optimized query
-        for retriever in self.config.rag_retrievers.values():
-            retriever._query_cache = query_cache
+        optimized_query = self.get_optimized_query(user_input, query_cache)
         
         # Filter intents with confidence > threshold
         CONFIDENCE_THRESHOLD = 0.6
@@ -273,10 +292,160 @@ class HealthcareWorkflow:
             if intent_obj['confidence'] >= CONFIDENCE_THRESHOLD
         ]
         
+        # Filter out general_conversation if there's a more specific medical intent
+        medical_intents = ['symptom_checker', 'ayush_support', 'yoga_support', 
+                          'mental_wellness_support', 'health_advisory', 
+                          'government_scheme_support', 'facility_locator_support']
+        
+        has_medical_intent = any(
+            intent_obj['intent'] in medical_intents 
+            for intent_obj in relevant_intents
+        )
+        
+        if has_medical_intent:
+            original_count = len(relevant_intents)
+            relevant_intents = [
+                intent_obj for intent_obj in relevant_intents
+                if intent_obj['intent'] != 'general_conversation'
+            ]
+            if len(relevant_intents) < original_count:
+                print(f"   🔍 Filtered out general_conversation (medical intent takes priority)")
+        
         if not relevant_intents:
-            # Fallback to primary intent
             primary = classification.get("primary_intent")
-            return await self._execute_single_agent(user_input, primary, classification)
+            return await self._execute_single_agent(user_input, primary, classification, None, user_profile)
+        
+        print(f"   → Retrieving from {len(relevant_intents)} knowledge domains in parallel...")
+        
+        # Parallel retrieval from all relevant RAG collections
+        # Fetch MORE documents initially (will rerank to get best ones)
+        INITIAL_FETCH_COUNT = 20  # Fetch 20 from each domain
+        FINAL_COUNT = 10  # After reranking, keep top 10 overall
+        
+        retrieval_tasks = []
+        domain_names = []
+        
+        for intent_obj in relevant_intents:
+            intent = intent_obj['intent']
+            
+            # Only retrieve from RAG-based domains
+            if intent == 'ayush_support':
+                domain_names.append('Ayurveda')
+                retrieval_tasks.append(asyncio.to_thread(
+                    self.config.rag_retrievers['ayush'].get_relevant_documents, 
+                    optimized_query
+                ))
+            elif intent == 'yoga_support':
+                domain_names.append('Yoga')
+                retrieval_tasks.append(asyncio.to_thread(
+                    self.config.rag_retrievers['yoga'].get_relevant_documents, 
+                    optimized_query
+                ))
+            elif intent == 'government_scheme_support':
+                domain_names.append('Government Schemes')
+                retrieval_tasks.append(asyncio.to_thread(
+                    self.config.rag_retrievers['schemes'].get_relevant_documents, 
+                    optimized_query
+                ))
+        
+        # Get all documents in parallel
+        if retrieval_tasks:
+            print(f"   📚 Fetching relevant documents from: {', '.join(domain_names)}")
+            all_docs = await asyncio.gather(*retrieval_tasks, return_exceptions=True)
+            
+            # Combine all documents from all domains for reranking
+            all_retrieved_docs = []
+            domain_doc_counts = {}
+            
+            for domain, docs in zip(domain_names, all_docs):
+                if isinstance(docs, Exception):
+                    print(f"   ⚠️ {domain} retrieval failed: {docs}")
+                elif docs:
+                    all_retrieved_docs.extend(docs)
+                    domain_doc_counts[domain] = len(docs)
+                    print(f"   ✅ {domain}: {len(docs)} documents retrieved")
+                else:
+                    print(f"   ⚠️ {domain}: No documents found")
+            
+            # Rerank all documents together to get globally best results
+            if all_retrieved_docs and len(all_retrieved_docs) > FINAL_COUNT:
+                print(f"   🔄 Reranking {len(all_retrieved_docs)} documents across all domains...")
+                
+                # Get reranker from any retriever (they share the same instance)
+                sample_retriever = self.config.rag_retrievers.get('ayush') or self.config.rag_retrievers.get('yoga')
+                
+                if sample_retriever and hasattr(sample_retriever, 'reranker') and sample_retriever.reranker:
+                    reranked_docs = sample_retriever.reranker.rerank(
+                        query=optimized_query,
+                        documents=all_retrieved_docs,
+                        top_k=FINAL_COUNT
+                    )
+                    print(f"   ✨ Reranked to top {len(reranked_docs)} most relevant documents")
+                    final_docs = reranked_docs
+                else:
+                    print(f"   ⚠️ Reranker not available, using top {FINAL_COUNT} from initial retrieval")
+                    final_docs = all_retrieved_docs[:FINAL_COUNT]
+            else:
+                final_docs = all_retrieved_docs
+            
+            # Build context from final documents
+            if final_docs:
+                combined_context = "\n\n---\n\n".join([
+                    f"[Source: {doc.metadata.get('source', 'Unknown')}]\n{doc.page_content}" 
+                    for doc in final_docs
+                ])
+                
+                print(f"   📝 Prepared {len(final_docs)} documents for LLM context")
+            else:
+                combined_context = "No relevant information found in knowledge base."
+            
+            # Generate single unified response with reranked context
+            print(f"   🤖 Generating unified response...")
+            
+            # Use primary chain (symptom checker or ayush) with all context
+            primary_intent = classification.get("primary_intent")
+            
+            unified_prompt = f"""You are a holistic healthcare assistant. Answer the user's query using the provided knowledge from multiple domains.
+
+User Query: {user_input}
+
+Available Knowledge (ranked by relevance):
+{combined_context}
+
+Provide a comprehensive response that integrates relevant information from all sources. Structure your response clearly with sections if multiple domains are relevant."""
+
+            response = self.config.llm_primary.invoke(unified_prompt)
+            
+            result = {
+                "intent": primary_intent,
+                "all_intents": all_intents,
+                "is_multi_domain": True,
+                "reasoning": classification.get("reasoning"),
+                "output": response.content,
+                "domains_searched": domain_names,
+                "documents_used": len(final_docs)
+            }
+            
+        else:
+            # No RAG domains, use direct agent execution
+            print(f"   → No RAG domains detected, using direct agent execution")
+            result = await self._execute_multi_agent_legacy(user_input, relevant_intents, classification, query_cache)
+        
+        return result
+    
+    async def _execute_multi_agent_legacy(self, user_input: str, relevant_intents: List[Dict], classification: Dict, query_cache: Dict = None) -> Dict[str, Any]:
+        """Legacy multi-agent execution for non-RAG domains"""
+        print(f"   → Running {len(relevant_intents)} agents in parallel...\n")
+        
+        # Extract all intents from classification or relevant_intents
+        all_intents = classification.get("all_intents", relevant_intents)
+        
+        # PRE-OPTIMIZE query ONCE before launching agents (critical for performance)
+        self._preoptimize_query(user_input, query_cache)
+        
+        # Inject cache into all retrievers so they use the optimized query
+        for retriever in self.config.rag_retrievers.values():
+            retriever._query_cache = query_cache
         
         # Start YouTube video search early (if yoga is involved) - runs in parallel with agents
         youtube_task = None
@@ -371,13 +540,37 @@ class HealthcareWorkflow:
             elif intent == "facility_locator_support":
                 print(f"      [{agent_name}] Using Web Search...")
                 return self.hospital_chain.run(user_input)
+            elif intent == "symptom_checker":
+                print(f"      [{agent_name}] Analyzing symptoms...")
+                # Run symptom handler synchronously
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                symptom_result = loop.run_until_complete(self._handle_symptoms(user_input, None))
+                loop.close()
+                return symptom_result.get("output", "")
+            elif intent == "health_advisory":
+                print(f"      [{agent_name}] Fetching health advisories...")
+                return self.advisory_chain.run(user_input)
+            elif intent == "general_conversation":
+                # Handle greetings and casual conversation
+                greetings = ["hello", "hi", "hey", "namaste", "greetings"]
+                thanks = ["thank", "thanks", "appreciate"]
+                lower_input = user_input.lower()
+                if any(word in lower_input for word in greetings):
+                    return "Namaste! 🙏 I'm DeepShiva, your holistic health companion. How can I support your well-being today?"
+                elif any(word in lower_input for word in thanks):
+                    return "You're most welcome! 🙏 Feel free to ask if you have any other health-related questions. Stay healthy!"
+                else:
+                    return "I'm here to help with your health and wellness needs. How may I assist you?"
             else:
+                print(f"      ⚠️ No handler for intent: {intent}")
                 return None
         except Exception as e:
             print(f"      ❌ Error in {intent} agent: {e}")
             return None
     
-    async def _handle_symptoms(self, user_input: str) -> Dict[str, Any]:
+    async def _handle_symptoms(self, user_input: str, user_profile: Any = None) -> Dict[str, Any]:
         """Handle symptom checking with multi-agent follow-up"""
         # 1. Fast Keyword/Regex Check
         is_emergency, reason = self.emergency_detector.check_emergency(user_input)
@@ -406,26 +599,77 @@ Reason: {reason or "Critical symptoms detected"}
 {hospital_list}
 """
         else:
-            symptom_text = f"Patient has {', '.join(symptom_data.symptoms)} with severity {symptom_data.severity}/10"
+            symptom_text = f"Patient has {', '.join(symptom_data.symptoms)}"
             
-            # Run agents in parallel or sequence
-            ayurveda_rec = self.ayush_chain.run(f"Provide ayurvedic remedies for: {symptom_text}")
-            yoga_rec = self.yoga_chain.run(f"Suggest yoga for: {symptom_text}")
-            wellness_rec = self.mental_wellness_chain.run(f"Provide wellness advice for: {symptom_text}")
+            # Run agents in PARALLEL for faster response
+            print("      → Running RAG retrieval in parallel (Ayurveda, Yoga, Mental Wellness)...")
+            
+            async def get_all_recommendations():
+                tasks = [
+                    asyncio.to_thread(self.ayush_chain.run, f"Provide ayurvedic remedies for: {symptom_text}"),
+                    asyncio.to_thread(self.yoga_chain.run, f"Suggest yoga for: {symptom_text}"),
+                    asyncio.to_thread(self.mental_wellness_chain.run, f"Provide wellness advice for: {symptom_text}")
+                ]
+                return await asyncio.gather(*tasks)
+            
+            # Execute in parallel
+            ayurveda_rec, yoga_rec, wellness_rec = await get_all_recommendations()
+            print(f"      ✓ Parallel retrieval complete")
+            
+            # Filter out mental wellness if no relevant results
+            wellness_not_found = (
+                "could not find" in wellness_rec.lower() or
+                "no information" in wellness_rec.lower() or
+                "try rephrasing" in wellness_rec.lower() or
+                len(wellness_rec.strip()) < 50
+            )
             
             # Store raw results for specific frontend components if needed
             result["ayurveda_recommendations"] = ayurveda_rec
-            # result["yoga_recommendations"] = yoga_rec # Commented out to avoid duplicate display in frontend (now included in main output)
-            result["general_guidance"] = wellness_rec
+            if not wellness_not_found:
+                result["general_guidance"] = wellness_rec
             
-            # Construct unified Markdown Output to ensure visibility
-            unified_output = "Based on your symptoms, here are some recommendations:\n\n"
+            # Construct unified output with only relevant sections
+            sections = []
+            sections.append(f"### 🌿 Ayurveda & Natural Remedies\n{ayurveda_rec}")
+            sections.append(f"### 🧘 Yoga & Breathing\n{yoga_rec}")
             
-            unified_output += f"### 🌿 Ayurveda & Natural Remedies\n{ayurveda_rec}\n\n"
-            unified_output += f"### 🧘 Yoga & Breathing\n{yoga_rec}\n\n"
-            unified_output += f"### 🧠 Mental Wellness & General Advice\n{wellness_rec}\n"
+            # Only add mental wellness if relevant results found
+            if not wellness_not_found:
+                sections.append(f"### 🧠 Mental Wellness & General Advice\n{wellness_rec}")
             
-            result["output"] = unified_output
+            # Final response generation
+            print("      → Generating final response...")
+            final_output = "Based on your symptoms, here are some recommendations:\n\n" + "\n\n".join(sections)
+            
+            # Add drug interaction warning if patient is on medications
+            try:
+                current_medications = []
+                if user_profile is not None:
+                    if isinstance(user_profile, dict):
+                        medications = user_profile.get("medications", "[]")
+                    else:
+                        medications = user_profile.medications
+                    
+                    if medications and medications != "[]":
+                        import json
+                        if isinstance(medications, str):
+                            try:
+                                current_medications = json.loads(medications)
+                            except:
+                                current_medications = [m.strip() for m in medications.split(",") if m.strip()]
+                        elif isinstance(medications, list):
+                            current_medications = medications
+                
+                # Add medication warning if patient has medications
+                if current_medications:
+                    med_list = ", ".join(current_medications)
+                    final_output += f"\n\n⚠️ **Important**: You are currently taking: {med_list}. Please consult your healthcare provider before starting any new herbal or Ayurvedic treatments to avoid potential drug interactions."
+            except Exception as e:
+                print(f"      ⚠️ Could not parse medications: {e}")
+            
+            result["output"] = final_output
+            print("      ✓ Response generated")
             
             # Add YouTube videos for Yoga
             try:
@@ -434,4 +678,58 @@ Reason: {reason or "Critical symptoms detected"}
             except Exception as e:
                 print(f"⚠️ Failed to fetch YouTube videos: {e}")
         
-        return result
+        return result    
+    async def _format_and_verify_response(self, raw_response: str, symptom_context: str, current_medications: List[str] = None) -> str:
+        """Format response beautifully, cross-check facts, and verify drug interactions"""
+        
+        # Build medication context
+        medication_context = ""
+        if current_medications and len(current_medications) > 0:
+            medication_context = f"\n\n**CRITICAL - Patient's Current Medications**: {', '.join(current_medications)}\n**You MUST check for drug interactions between these allopathic medicines and any recommended Ayurvedic/herbal remedies.**"
+        
+        formatting_prompt = f"""You are a medical content formatter. Clean up and improve this response.
+
+**FORMATTING RULES:**
+- Keep it natural and conversational - NO excessive spacing or indentation
+- Use single line breaks between items, double line breaks between sections only
+- Headings: Use ### with emoji (e.g., ### 🌿 Ayurveda) - NO indentation
+- DO NOT use numbered lists (1., 2., 3.) - use sections with headings instead
+- Bullets: Use - at the START of line (no leading spaces)
+- Sub-bullets: Only 2 spaces before - for sub-items
+- Bold important terms: **Term Name:** followed by description on SAME line
+- Keep all [Source: ...] citations exactly as they are
+- NO blank lines between related items
+- NO indentation anywhere
+- NO general disclaimers (added separately)
+
+**DRUG INTERACTION CHECK:**{medication_context}
+- If patient has medications, check for interactions with recommended herbs
+- Add ⚠️ Drug Interaction Note ONLY if there's a real concern
+- Be specific: which herb + which medicine = what risk
+
+**CONTENT QUALITY:**
+- Verify medical accuracy
+- Keep dosages and instructions clear
+- Organize: Traditional remedies → Dietary advice → Lifestyle tips
+- Each recommendation should be: **Name**: Description on same line
+
+Context: {symptom_context}
+
+Raw Response:
+{raw_response}
+
+Return the cleaned, natural-sounding response with NO indentation, NO numbered lists, and proper compact formatting."""
+        
+        from langchain_core.output_parsers import StrOutputParser
+        from langchain_core.prompts import ChatPromptTemplate
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are a medical content expert who formats and verifies healthcare advice."),
+            ("user", "{input}")
+        ])
+        
+        chain = prompt | self.config.llm_secondary | StrOutputParser()
+        formatted = await asyncio.to_thread(chain.invoke, {"input": formatting_prompt})
+        
+        print("      ✓ Response formatted and verified")
+        return formatted

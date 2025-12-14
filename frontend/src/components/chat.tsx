@@ -11,6 +11,7 @@ import {
 import VoiceRecorder from "./VoiceRecorder";
 import { getValidToken, setupTokenRefresh, onAuthChange } from "@/lib/firebase-client";
 import HealthAlertsWidget from "./HealthAlertsWidget";
+import OnboardingModal from "./onboarding/OnboardingModal";
 
 // --- Types ---
 type Message = {
@@ -44,15 +45,15 @@ const formatResponse = (response: ChatResponse): React.ReactNode => {
         <div className="prose prose-stone max-w-none">
           <ReactMarkdown
             components={{
-              p: ({ children }) => <p className="mb-2 last:mb-0 text-stone-700 leading-relaxed">{children}</p>,
-              h1: ({ children }) => <h1 className="text-2xl font-bold text-stone-800 mb-3">{children}</h1>,
-              h2: ({ children }) => <h2 className="text-xl font-bold text-stone-800 mb-2">{children}</h2>,
-              h3: ({ children }) => <h3 className="text-lg font-semibold text-stone-800 mb-2">{children}</h3>,
+              p: ({ children }) => <p className="mb-3 text-stone-700 leading-relaxed text-[15px]">{children}</p>,
+              h1: ({ children }) => <h1 className="text-2xl font-bold text-stone-800 mb-4 mt-6">{children}</h1>,
+              h2: ({ children }) => <h2 className="text-xl font-bold text-stone-800 mb-3 mt-5">{children}</h2>,
+              h3: ({ children }) => <h3 className="text-lg font-semibold text-stone-800 mb-3 mt-4">{children}</h3>,
               strong: ({ children }) => <strong className="font-semibold text-stone-900">{children}</strong>,
-              ul: ({ children }) => <ul className="list-disc list-inside space-y-1 ml-4">{children}</ul>,
-              ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 ml-4">{children}</ol>,
-              li: ({ children }) => <li className="text-stone-700">{children}</li>,
-              code: ({ children }) => <code className="bg-stone-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
+              ul: ({ children }) => <ul className="list-disc ml-5 space-y-0.5 my-2">{children}</ul>,
+              ol: ({ children }) => <ol className="list-decimal ml-5 space-y-0.5 my-2">{children}</ol>,
+              li: ({ children }) => <li className="text-stone-700 text-[15px] leading-relaxed">{children}</li>,
+              code: ({ children }) => <code className="bg-stone-100 px-1.5 py-0.5 rounded text-sm font-mono text-stone-800">{children}</code>,
             }}
           >
             {content}
@@ -169,6 +170,7 @@ export default function HealthcareChat() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Desktop default open
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false); // Health Alerts
+  const [showOnboarding, setShowOnboarding] = useState(false); // Onboarding modal
 
   // Audio State
   const [playingMessageIndex, setPlayingMessageIndex] = useState<number | null>(null);
@@ -231,13 +233,33 @@ export default function HealthcareChat() {
     if (!validToken) return;
     
     try {
-      const res = await fetch("/api/profile", {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const res = await fetch(`${backendUrl}/auth/me`, {
         headers: { Authorization: `Bearer ${validToken}` }
       });
       if (res.ok) {
         const profile = await res.json();
         console.log("User profile loaded:", profile);
         setUserProfile(profile);
+        
+        // Check if profile is incomplete (trigger onboarding)
+        const isAgeMissing = 
+          profile.age === null || 
+          profile.age === undefined || 
+          profile.age === 0 || 
+          profile.age === "0" ||
+          profile.age === "";
+
+        const isGenderMissing = 
+          !profile.gender || 
+          profile.gender === "" || 
+          profile.gender === "Unknown" ||
+          profile.gender === null;
+
+        if (isAgeMissing || isGenderMissing) {
+          console.log("Profile incomplete. Showing onboarding modal.");
+          setShowOnboarding(true);
+        }
       } else {
         console.error("Failed to fetch profile:", res.status, await res.text());
       }
@@ -336,15 +358,15 @@ export default function HealthcareChat() {
                   <div className="prose prose-stone max-w-none">
                     <ReactMarkdown
                       components={{
-                        p: ({ children }) => <p className="mb-2 last:mb-0 text-stone-700 leading-relaxed">{children}</p>,
-                        h1: ({ children }) => <h1 className="text-2xl font-bold text-stone-800 mb-3">{children}</h1>,
-                        h2: ({ children }) => <h2 className="text-xl font-bold text-stone-800 mb-2">{children}</h2>,
-                        h3: ({ children }) => <h3 className="text-lg font-semibold text-stone-800 mb-2">{children}</h3>,
+                        p: ({ children }) => <p className="mb-3 text-stone-700 leading-relaxed text-[15px]">{children}</p>,
+                        h1: ({ children }) => <h1 className="text-2xl font-bold text-stone-800 mb-4 mt-6">{children}</h1>,
+                        h2: ({ children }) => <h2 className="text-xl font-bold text-stone-800 mb-3 mt-5">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-lg font-semibold text-stone-800 mb-3 mt-4">{children}</h3>,
                         strong: ({ children }) => <strong className="font-semibold text-stone-900">{children}</strong>,
-                        ul: ({ children }) => <ul className="list-disc list-inside space-y-1 ml-4">{children}</ul>,
-                        ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 ml-4">{children}</ol>,
-                        li: ({ children }) => <li className="text-stone-700">{children}</li>,
-                        code: ({ children }) => <code className="bg-stone-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
+                        ul: ({ children }) => <ul className="list-disc ml-5 space-y-0.5 my-2">{children}</ul>,
+                        ol: ({ children }) => <ol className="list-decimal ml-5 space-y-0.5 my-2">{children}</ol>,
+                        li: ({ children }) => <li className="text-stone-700 text-[15px] leading-relaxed">{children}</li>,
+                        code: ({ children }) => <code className="bg-stone-100 px-1.5 py-0.5 rounded text-sm font-mono text-stone-800">{children}</code>,
                       }}
                     >
                       {content}
@@ -527,6 +549,54 @@ export default function HealthcareChat() {
       if (currentSessionId === requestSessionId || (!currentSessionId && !requestSessionId)) {
         setIsLoading(false);
       }
+    }
+  };
+
+  // --- Onboarding Handler ---
+  const handleOnboardingComplete = async (data: any) => {
+    const token = await getValidToken();
+    if (!token) {
+      console.error("Cannot save profile: no token");
+      return;
+    }
+
+    try {
+      // Parse data from onboarding form
+      const payload = {
+        age: parseInt(data.age) || 0,
+        gender: data.gender || "",
+        medical_history: data.existingConditions 
+          ? data.existingConditions.split(',').map((s: string) => s.trim()).filter(Boolean)
+          : [],
+        medications: data.medications
+          ? data.medications.split(',').map((s: string) => s.trim()).filter(Boolean)
+          : [],
+        previous_conditions: data.previousConditions
+          ? data.previousConditions.split(',').map((s: string) => s.trim()).filter(Boolean)
+          : [],
+        address: data.address || {}
+      };
+
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const res = await fetch(`${backendUrl}/users/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        console.log("Profile updated successfully");
+        setShowOnboarding(false);
+        // Refresh profile to get updated data
+        await fetchUserProfile(token);
+      } else {
+        console.error("Failed to update profile:", await res.text());
+      }
+    } catch (err) {
+      console.error("Error updating profile:", err);
     }
   };
 
@@ -979,6 +1049,13 @@ Please provide:
           </p>
         </div >
       </main >
+
+      {/* Onboarding Modal */}
+      <OnboardingModal 
+        isOpen={showOnboarding}
+        onClose={() => setShowOnboarding(false)}
+        onComplete={handleOnboardingComplete}
+      />
     </div >
   );
 }

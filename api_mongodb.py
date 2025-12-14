@@ -65,13 +65,6 @@ async def lifespan(app: FastAPI):
     
     await mongodb_manager.connect()
     
-    # Create indexes for user_profiles collection
-    try:
-        await mongodb_manager.db.user_profiles.create_index("user_id", unique=True)
-        logger.info("✅ Created user_profiles indexes")
-    except Exception as e:
-        logger.warning(f"Index creation: {e}")
-    
     # Fetch initial health news
     await fetch_initial_health_news()
     
@@ -172,6 +165,30 @@ class UserProfile(BaseModel):
     display_name: Optional[str] = None
     photo_url: Optional[str] = None
     created_at: str
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    medical_history: Optional[List[str]] = []
+    medications: Optional[List[str]] = []
+    previous_conditions: Optional[List[str]] = []
+    address: Optional[dict] = None
+
+class AddressModel(BaseModel):
+    street: str = ""
+    district: str = ""
+    state: str = ""
+    pincode: str = ""
+
+class UserProfileUpdate(BaseModel):
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    
+    # Frontend sends these as Lists (e.g., ["Diabetes", "Asthma"])
+    medical_history: Optional[List[str]] = []
+    medications: Optional[List[str]] = []
+    previous_conditions: Optional[List[str]] = []
+    
+    # Frontend sends address as an object
+    address: Optional[AddressModel] = None
 
 class SessionResponse(BaseModel):
     id: str
@@ -461,15 +478,165 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
         else:
             display_name = None
         
+        # Decrypt age
+        age = None
+        if current_user.get("age_encrypted") and user_salt:
+            decrypted_age = encryption_manager.decrypt(current_user["age_encrypted"], user_salt)
+            try:
+                age = int(decrypted_age)
+            except (ValueError, TypeError):
+                age = None
+        elif current_user.get("age"):
+            # Fallback for non-encrypted age
+            age = current_user.get("age")
+        
+        # Decrypt gender
+        gender = None
+        if current_user.get("gender_encrypted") and user_salt:
+            gender = encryption_manager.decrypt(current_user["gender_encrypted"], user_salt)
+        elif current_user.get("gender"):
+            # Fallback for non-encrypted gender
+            gender = current_user.get("gender")
+        
+        # Decrypt address
+        address = None
+        if current_user.get("address_encrypted") and user_salt:
+            import json
+            decrypted_address = encryption_manager.decrypt(current_user["address_encrypted"], user_salt)
+            try:
+                address = json.loads(decrypted_address)
+            except (json.JSONDecodeError, TypeError):
+                address = None
+        elif current_user.get("address"):
+            # Fallback for non-encrypted address
+            address = current_user.get("address")
+        
+        # Decrypt medical data
+        medical_history = []
+        if current_user.get("medical_history_encrypted") and user_salt:
+            decrypted = encryption_manager.decrypt(current_user["medical_history_encrypted"], user_salt)
+            medical_history = [h.strip() for h in decrypted.split(",") if h.strip()]
+        
+        medications = []
+        if current_user.get("medications_encrypted") and user_salt:
+            decrypted = encryption_manager.decrypt(current_user["medications_encrypted"], user_salt)
+            medications = [m.strip() for m in decrypted.split(",") if m.strip()]
+        
+        previous_conditions = []
+        if current_user.get("previous_conditions_encrypted") and user_salt:
+            decrypted = encryption_manager.decrypt(current_user["previous_conditions_encrypted"], user_salt)
+            previous_conditions = [p.strip() for p in decrypted.split(",") if p.strip()]
+        
         return UserProfile(
             id=str(current_user["_id"]),
             email=email,
             display_name=display_name,
             photo_url=current_user.get("photo_url"),
-            created_at=current_user["created_at"].isoformat()
+            created_at=current_user["created_at"].isoformat(),
+            age=age,
+            gender=gender,
+            medical_history=medical_history,
+            medications=medications,
+            previous_conditions=previous_conditions,
+            address=address
         )
     except Exception as e:
         logger.error(f"Profile fetch error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/users/profile")
+async def update_user_profile(
+    profile_data: UserProfileUpdate,
+    current_user: dict = Depends(get_current_user),
+    request: Request = None
+):
+    """
+    Updates the user profile from the onboarding questionnaire/profile modal.
+    Encrypts sensitive medical data before saving to MongoDB.
+    """
+    try:
+        user_id = current_user["_id"]
+        logger.info(f"📝 Updating profile for user: {user_id}")
+        logger.info(f"Profile data received: age={profile_data.age}, gender={profile_data.gender}, medical_history={profile_data.medical_history}")
+        
+        # 1. Get the user's unique salt for encryption
+        user_salt = current_user.get("encryption_key_id")
+        
+        # Safety check: if no salt exists (rare), create one
+        if not user_salt:
+            logger.warning(f"No encryption key found for user {user_id}, creating one...")
+            user_salt = encryption_manager.generate_user_salt()
+            await mongodb_manager.db.users.update_one(
+                {"_id": user_id}, 
+                {"$set": {"encryption_key_id": user_salt}}
+            )
+            logger.info(f"✅ Created encryption key for user {user_id}")
+
+        # 2. Prepare the update dictionary
+        update_fields = {}
+        
+        # 3. ENCRYPT All Profile Data (HIPAA Compliance)
+        # Basic Fields - also encrypted for privacy
+        if profile_data.age is not None:
+            encrypted_age = encryption_manager.encrypt(str(profile_data.age), user_salt)
+            update_fields["age_encrypted"] = encrypted_age
+            logger.info(f"✅ Encrypted age")
+        
+        if profile_data.gender:
+            encrypted_gender = encryption_manager.encrypt(profile_data.gender, user_salt)
+            update_fields["gender_encrypted"] = encrypted_gender
+            logger.info(f"✅ Encrypted gender")
+        
+        if profile_data.address:
+            # Convert address to JSON string, then encrypt
+            import json
+            address_json = json.dumps(profile_data.address.dict())
+            encrypted_address = encryption_manager.encrypt(address_json, user_salt)
+            update_fields["address_encrypted"] = encrypted_address
+            logger.info(f"✅ Encrypted address")
+
+        # Medical data encryption
+        # We convert lists to strings, then encrypt them
+        if profile_data.medical_history:
+            combined_history = ", ".join(profile_data.medical_history)
+            encrypted_history = encryption_manager.encrypt(combined_history, user_salt)
+            update_fields["medical_history_encrypted"] = encrypted_history
+            logger.info(f"✅ Encrypted medical history: {len(profile_data.medical_history)} items")
+        
+        if profile_data.previous_conditions:
+             # Merge previous conditions into medical history or store separately
+             combined_prev = ", ".join(profile_data.previous_conditions)
+             encrypted_prev = encryption_manager.encrypt(combined_prev, user_salt)
+             update_fields["previous_conditions_encrypted"] = encrypted_prev
+             logger.info(f"✅ Encrypted previous conditions: {len(profile_data.previous_conditions)} items")
+
+        if profile_data.medications:
+            combined_meds = ", ".join(profile_data.medications)
+            encrypted_meds = encryption_manager.encrypt(combined_meds, user_salt)
+            update_fields["medications_encrypted"] = encrypted_meds
+            logger.info(f"✅ Encrypted medications: {len(profile_data.medications)} items")
+
+        if not update_fields:
+            logger.warning("No fields to update")
+            return {"message": "No changes to update"}
+
+        # 4. Update MongoDB users collection
+        logger.info(f"💾 Saving {len(update_fields)} encrypted fields to MongoDB...")
+        result = await mongodb_manager.db.users.update_one(
+            {"_id": user_id},
+            {"$set": update_fields}
+        )
+        
+        logger.info(f"✅ MongoDB update result: matched={result.matched_count}, modified={result.modified_count}")
+        
+        # Log this significant event
+        await log_audit(user_id, "PROFILE_UPDATE", "user", user_id, request)
+        
+        return {"message": "Profile updated successfully", "status": "success"}
+
+    except Exception as e:
+        logger.error(f"❌ Error updating profile: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -515,24 +682,47 @@ async def chat(
         session_id = session["_id"]
         
         # --- USER PROFILE INTEGRATION WITH DISHA COMPLIANCE ---
-        # Fetch or create user profile
-        user_profile_raw = await mongodb_manager.db.user_profiles.find_one({"user_id": user_id})
+        # Use current_user data directly (from users collection)
+        # Decrypt age
+        age = None
+        if current_user.get("age_encrypted") and user_salt:
+            decrypted_age = encryption_manager.decrypt(current_user["age_encrypted"], user_salt)
+            try:
+                age = int(decrypted_age)
+            except (ValueError, TypeError):
+                age = None
+        elif current_user.get("age"):
+            age = current_user.get("age")
         
-        if not user_profile_raw:
-            # Create empty profile
-            profile_doc = {
-                "user_id": user_id,
-                "age": None,
-                "gender": None,
-                "medical_history": "[]",
-                "allergies": "[]",
-                "medications": "[]",
-                "language_preference": "en",
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
-            }
-            await mongodb_manager.db.user_profiles.insert_one(profile_doc)
-            user_profile_raw = await mongodb_manager.db.user_profiles.find_one({"user_id": user_id})
+        # Decrypt gender
+        gender = None
+        if current_user.get("gender_encrypted") and user_salt:
+            gender = encryption_manager.decrypt(current_user["gender_encrypted"], user_salt)
+        elif current_user.get("gender"):
+            gender = current_user.get("gender")
+        
+        user_profile_raw = {
+            "user_id": user_id,
+            "age": age,
+            "gender": gender,
+            "medical_history": "[]",
+            "allergies": "[]",
+            "medications": "[]",
+            "language_preference": "en"
+        }
+        
+        # Decrypt medical data if encrypted
+        if current_user.get("medical_history_encrypted") and user_salt:
+            decrypted = encryption_manager.decrypt(current_user["medical_history_encrypted"], user_salt)
+            user_profile_raw["medical_history"] = decrypted
+        
+        if current_user.get("medications_encrypted") and user_salt:
+            decrypted = encryption_manager.decrypt(current_user["medications_encrypted"], user_salt)
+            user_profile_raw["medications"] = decrypted
+        
+        if current_user.get("allergies_encrypted") and user_salt:
+            decrypted = encryption_manager.decrypt(current_user["allergies_encrypted"], user_salt)
+            user_profile_raw["allergies"] = decrypted
         
         # Anonymize user data (DISHA compliance)
         user_email = encryption_manager.decrypt(current_user.get("email_encrypted", ""), user_salt)
@@ -625,18 +815,31 @@ User Profile (Anonymized ID: {anonymous_id}):
         
         # Check if workflow updated the profile
         if result.get("profile_updated"):
-            await mongodb_manager.db.user_profiles.update_one(
-                {"user_id": user_id},
-                {"$set": {
-                    "age": user_profile_raw.get("age"),
-                    "gender": user_profile_raw.get("gender"),
-                    "medical_history": user_profile_raw.get("medical_history"),
-                    "allergies": user_profile_raw.get("allergies"),
-                    "medications": user_profile_raw.get("medications"),
-                    "updated_at": datetime.utcnow()
-                }}
-            )
-            logger.info(f"Updated user profile for {user_id}")
+            # Encrypt updated data before storing in users collection
+            update_fields = {}
+            
+            if user_profile_raw.get("age"):
+                encrypted_age = encryption_manager.encrypt(str(user_profile_raw["age"]), user_salt)
+                update_fields["age_encrypted"] = encrypted_age
+            
+            if user_profile_raw.get("gender"):
+                encrypted_gender = encryption_manager.encrypt(user_profile_raw["gender"], user_salt)
+                update_fields["gender_encrypted"] = encrypted_gender
+            
+            if user_profile_raw.get("medical_history"):
+                encrypted_history = encryption_manager.encrypt(user_profile_raw["medical_history"], user_salt)
+                update_fields["medical_history_encrypted"] = encrypted_history
+            
+            if user_profile_raw.get("medications"):
+                encrypted_meds = encryption_manager.encrypt(user_profile_raw["medications"], user_salt)
+                update_fields["medications_encrypted"] = encrypted_meds
+            
+            if update_fields:
+                await mongodb_manager.db.users.update_one(
+                    {"_id": user_id},
+                    {"$set": update_fields}
+                )
+                logger.info(f"Updated user profile for {user_id}")
         
         # --- TTS AUDIO GENERATION (if requested) ---
         audio_url = None

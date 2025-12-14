@@ -4,13 +4,24 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { 
   User, Mail, Phone, ArrowLeft, Save, Edit2, 
-  Leaf, Loader2, Camera 
+  Leaf, Loader2, Camera, Calendar, Users, Pill, Heart, MapPin
 } from "lucide-react";
 
 type UserProfile = {
   name: string;
   email: string;
   phone?: string;
+  age?: number;
+  gender?: string;
+  medical_history?: string[];
+  medications?: string[];
+  previous_conditions?: string[];
+  address?: {
+    street?: string;
+    district?: string;
+    state?: string;
+    pincode?: string;
+  };
 };
 
 export default function ProfilePage() {
@@ -18,7 +29,13 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile>({
     name: "",
     email: "",
-    phone: ""
+    phone: "",
+    age: 0,
+    gender: "",
+    medical_history: [],
+    medications: [],
+    previous_conditions: [],
+    address: {}
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -48,7 +65,13 @@ export default function ProfilePage() {
         setProfile({
           name: data.display_name || "",
           email: data.email || "",
-          phone: data.phone || ""
+          phone: data.phone || "",
+          age: data.age || 0,
+          gender: data.gender || "",
+          medical_history: data.medical_history || [],
+          medications: data.medications || [],
+          previous_conditions: data.previous_conditions || [],
+          address: data.address || {}
         });
       } else {
         const errorText = await res.text();
@@ -72,25 +95,39 @@ export default function ProfilePage() {
     const token = localStorage.getItem("token");
 
     try {
-      // Assuming PUT /api/auth/profile updates details
-      const res = await fetch("/api/auth/profile", {
-        method: "PUT", // or PATCH
+      // Convert string fields to arrays before sending
+      const payload = {
+        ...profile,
+        medical_history: typeof profile.medical_history === 'string' 
+          ? profile.medical_history.split(',').map(s => s.trim()).filter(Boolean)
+          : profile.medical_history,
+        medications: typeof profile.medications === 'string'
+          ? profile.medications.split(',').map(s => s.trim()).filter(Boolean)
+          : profile.medications,
+        previous_conditions: typeof profile.previous_conditions === 'string'
+          ? profile.previous_conditions.split(',').map(s => s.trim()).filter(Boolean)
+          : profile.previous_conditions
+      };
+
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const res = await fetch(`${backendUrl}/users/profile`, {
+        method: "PUT",
         headers: { 
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}` 
         },
-        body: JSON.stringify(profile),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) throw new Error("Failed to update profile");
 
       setSuccess("Profile updated successfully.");
       setIsEditing(false);
+      // Refresh profile to get updated data
+      await fetchProfile();
     } catch (err) {
-      // For Hackathon demo purposes, we simulate success if backend fails
-      console.warn("Backend update failed, simulating success for UI demo");
-      setSuccess("Profile updated successfully (Demo Mode)");
-      setIsEditing(false);
+      console.error("Profile update error:", err);
+      setError("Failed to update profile. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -211,6 +248,133 @@ export default function ProfilePage() {
                                 onChange={(e) => setProfile({...profile, phone: e.target.value})}
                                 placeholder={isEditing ? "Add your phone number" : "No phone number added"}
                                 className="w-full pl-12 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#3A5A40]/20 focus:border-[#3A5A40] disabled:bg-white disabled:border-transparent disabled:text-stone-600 disabled:pl-12 transition-all"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Age */}
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-stone-500 uppercase tracking-wider">Age</label>
+                        <div className="relative">
+                            <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
+                            <input
+                                type="number"
+                                disabled={!isEditing}
+                                value={profile.age || ""}
+                                onChange={(e) => setProfile({...profile, age: parseInt(e.target.value) || 0})}
+                                placeholder={isEditing ? "Enter your age" : "Not specified"}
+                                className="w-full pl-12 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#3A5A40]/20 focus:border-[#3A5A40] disabled:bg-white disabled:border-transparent disabled:text-stone-600 disabled:pl-12 transition-all"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Gender */}
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-stone-500 uppercase tracking-wider">Gender</label>
+                        <div className="relative">
+                            <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
+                            <select
+                                disabled={!isEditing}
+                                value={profile.gender || ""}
+                                onChange={(e) => setProfile({...profile, gender: e.target.value})}
+                                className="w-full pl-12 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#3A5A40]/20 focus:border-[#3A5A40] disabled:bg-white disabled:border-transparent disabled:text-stone-600 disabled:pl-12 transition-all"
+                            >
+                                <option value="">Select gender</option>
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Medical History */}
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-stone-500 uppercase tracking-wider">Existing Conditions</label>
+                        <div className="relative">
+                            <Heart className="absolute left-4 top-3 w-5 h-5 text-stone-400" />
+                            <textarea
+                                disabled={!isEditing}
+                                value={Array.isArray(profile.medical_history) ? profile.medical_history.join(", ") : profile.medical_history || ""}
+                                onChange={(e) => setProfile({...profile, medical_history: e.target.value as any})}
+                                placeholder={isEditing ? "Diabetes, Hypertension, etc." : "No conditions listed"}
+                                rows={2}
+                                className="w-full pl-12 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#3A5A40]/20 focus:border-[#3A5A40] disabled:bg-white disabled:border-transparent disabled:text-stone-600 disabled:pl-12 transition-all resize-none"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Medications */}
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-stone-500 uppercase tracking-wider">Current Medications</label>
+                        <div className="relative">
+                            <Pill className="absolute left-4 top-3 w-5 h-5 text-stone-400" />
+                            <textarea
+                                disabled={!isEditing}
+                                value={Array.isArray(profile.medications) ? profile.medications.join(", ") : profile.medications || ""}
+                                onChange={(e) => setProfile({...profile, medications: e.target.value as any})}
+                                placeholder={isEditing ? "Aspirin, Metformin, etc." : "No medications listed"}
+                                rows={2}
+                                className="w-full pl-12 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#3A5A40]/20 focus:border-[#3A5A40] disabled:bg-white disabled:border-transparent disabled:text-stone-600 disabled:pl-12 transition-all resize-none"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Previous Conditions */}
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-stone-500 uppercase tracking-wider">Previous Conditions</label>
+                        <div className="relative">
+                            <Heart className="absolute left-4 top-3 w-5 h-5 text-stone-400" />
+                            <textarea
+                                disabled={!isEditing}
+                                value={Array.isArray(profile.previous_conditions) ? profile.previous_conditions.join(", ") : profile.previous_conditions || ""}
+                                onChange={(e) => setProfile({...profile, previous_conditions: e.target.value as any})}
+                                placeholder={isEditing ? "Previous health issues" : "No previous conditions listed"}
+                                rows={2}
+                                className="w-full pl-12 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#3A5A40]/20 focus:border-[#3A5A40] disabled:bg-white disabled:border-transparent disabled:text-stone-600 disabled:pl-12 transition-all resize-none"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Address */}
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-stone-500 uppercase tracking-wider">Address</label>
+                        <div className="space-y-3">
+                            <div className="relative">
+                                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
+                                <input
+                                    type="text"
+                                    disabled={!isEditing}
+                                    value={profile.address?.street || ""}
+                                    onChange={(e) => setProfile({...profile, address: {...profile.address, street: e.target.value}})}
+                                    placeholder={isEditing ? "Street address" : "No street specified"}
+                                    className="w-full pl-12 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#3A5A40]/20 focus:border-[#3A5A40] disabled:bg-white disabled:border-transparent disabled:text-stone-600 disabled:pl-12 transition-all"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <input
+                                    type="text"
+                                    disabled={!isEditing}
+                                    value={profile.address?.district || ""}
+                                    onChange={(e) => setProfile({...profile, address: {...profile.address, district: e.target.value}})}
+                                    placeholder={isEditing ? "District" : "No district"}
+                                    className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#3A5A40]/20 focus:border-[#3A5A40] disabled:bg-white disabled:border-transparent disabled:text-stone-600 transition-all"
+                                />
+                                <input
+                                    type="text"
+                                    disabled={!isEditing}
+                                    value={profile.address?.state || ""}
+                                    onChange={(e) => setProfile({...profile, address: {...profile.address, state: e.target.value}})}
+                                    placeholder={isEditing ? "State" : "No state"}
+                                    className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#3A5A40]/20 focus:border-[#3A5A40] disabled:bg-white disabled:border-transparent disabled:text-stone-600 transition-all"
+                                />
+                            </div>
+                            <input
+                                type="text"
+                                disabled={!isEditing}
+                                value={profile.address?.pincode || ""}
+                                onChange={(e) => setProfile({...profile, address: {...profile.address, pincode: e.target.value}})}
+                                placeholder={isEditing ? "Pincode" : "No pincode"}
+                                className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#3A5A40]/20 focus:border-[#3A5A40] disabled:bg-white disabled:border-transparent disabled:text-stone-600 transition-all"
                             />
                         </div>
                     </div>
