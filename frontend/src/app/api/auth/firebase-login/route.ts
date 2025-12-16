@@ -3,7 +3,7 @@ export async function POST(request: Request) {
     const { idToken, email, displayName, photoURL } = await request.json();
 
     // Forward Firebase token to backend for verification
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+    const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
     const response = await fetch(`${backendUrl}/auth/firebase-login`, {
       method: 'POST',
       headers: {
