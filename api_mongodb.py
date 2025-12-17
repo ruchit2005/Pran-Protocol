@@ -1010,6 +1010,8 @@ async def chat(
                 {"user_id": user_id, "status": "processed"}
             ).sort("upload_date", -1).limit(5).to_list(length=5)
             
+            logger.info(f"📄 Found {len(recent_docs)} processed documents for user")
+            
             if recent_docs:
                 doc_summaries = []
                 doc_full_texts = []
@@ -1036,9 +1038,11 @@ async def chat(
                 
                 if doc_summaries:
                     document_context = "\n\nRecent Medical Documents:\n" + "\n".join(doc_summaries)
+                    logger.info(f"✅ Document context created with {len(doc_summaries)} summaries")
                 
                 if doc_full_texts:
                     full_documents_text = "\n\n".join(doc_full_texts)
+                    logger.info(f"✅ Full document text: {len(full_documents_text)} chars from {len(doc_full_texts)} docs")
         except Exception as e:
             logger.error(f"Failed to fetch document context: {e}")
         
@@ -1067,6 +1071,7 @@ User Profile (Anonymized ID: {anonymous_id}):
 - Medical Conditions: {anonymized_profile.get('medical_history', [])}
 - Allergies: {anonymized_profile.get('allergies', [])}
 - Current Medications: {anonymized_profile.get('medications', [])}
+{document_context}
 """
         
         # --- CHAT HISTORY INTEGRATION ---

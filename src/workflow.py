@@ -248,6 +248,11 @@ class HealthcareWorkflow:
                 elif hasattr(user_profile, "document_context"):
                     doc_context = user_profile.document_context or ""
                     full_text = getattr(user_profile, "full_documents_text", "")
+                
+                print(f"   📄 Document Context Length: {len(doc_context)} chars")
+                print(f"   📝 Full Text Length: {len(full_text)} chars")
+            else:
+                print("   ⚠️ No user profile provided")
             
             # Prefer full text for detailed queries, fall back to summary
             context_to_use = full_text if full_text else doc_context
@@ -255,6 +260,7 @@ class HealthcareWorkflow:
             if not context_to_use or "No documents" in context_to_use or len(context_to_use.strip()) < 10:
                 result["output"] = "I don't see any uploaded medical documents in your profile. Please upload your lab reports or prescriptions using the document upload button, and I'll be happy to help you understand them."
             else:
+                print(f"   ✅ Using document context ({len(context_to_use)} chars) for query")
                 result["output"] = self.document_qa.run(user_input, context_to_use)
         
         elif intent == "government_scheme_support":
@@ -270,6 +276,7 @@ class HealthcareWorkflow:
                 elif hasattr(user_profile, "document_context"):
                     doc_context = user_profile.document_context or ""
                 if doc_context:
+                    print(f"   📄 Adding document context to health advisory ({len(doc_context)} chars)")
                     query += f"\n\nPatient's Medical Records:{doc_context}"
             
             result["output"] = self.advisory_chain.run(query)
