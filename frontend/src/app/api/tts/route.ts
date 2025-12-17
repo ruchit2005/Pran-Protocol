@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
     const body = await req.json();
 
-    const backendUrl = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || "http://127.0.0.1:8000";
+    const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
     const target = `${backendUrl}/tts`;
 
     const token = req.headers.get('authorization');
@@ -12,7 +12,8 @@ export async function POST(req: Request) {
         method: "POST",
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': token || ''
+            'Authorization': token || '',
+            'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify(body),
     });

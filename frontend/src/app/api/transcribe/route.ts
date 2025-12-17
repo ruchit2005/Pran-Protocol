@@ -4,7 +4,7 @@ export async function POST(req: Request) {
   // Forward FormData directly to backend
   const form = await req.formData();
 
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || "http://localhost:8000";
+  const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
   const target = `${backendUrl}/transcribe`;
 
   // forward the formdata; the Fetch API accepts FormData directly
@@ -12,7 +12,8 @@ export async function POST(req: Request) {
   const res = await fetch(target, {
     method: "POST",
     headers: {
-      'Authorization': token || ''
+      'Authorization': token || '',
+      'ngrok-skip-browser-warning': 'true'
     },
     body: form,
     // credentials, headers left default so multipart boundary preserved

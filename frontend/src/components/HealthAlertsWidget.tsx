@@ -33,8 +33,7 @@ export default function HealthAlertsWidget({ isOpen, onClose, onAskMore }: Healt
   const fetchAlerts = async () => {
     try {
       setLoading(true);
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-      const res = await fetch(`${backendUrl}/alerts`);
+      const res = await fetch('/api/alerts');
       if (res.ok) {
         const data = await res.json();
         setAlerts(data.alerts || []);

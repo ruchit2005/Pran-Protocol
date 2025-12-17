@@ -112,8 +112,7 @@ export default function ProfilePage() {
           : profile.previous_conditions
       };
 
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-      const res = await fetch(`${backendUrl}/users/profile`, {
+      const res = await fetch('/api/profile', {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

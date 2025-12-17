@@ -42,7 +42,7 @@ export default function BlockchainAuditPage() {
       setLoading(true);
 
       // Fetch public stats (no auth needed)
-      const statsResponse = await fetch('http://localhost:8000/blockchain/stats');
+      const statsResponse = await fetch('/api/blockchain/stats');
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
         setStats(statsData);
@@ -52,7 +52,7 @@ export default function BlockchainAuditPage() {
       const token = localStorage.getItem('token');
       if (token) {
         // Get anonymous_id from backend (includes master_key salt)
-        const anonIdResponse = await fetch('http://localhost:8000/auth/anonymous-id', {
+        const anonIdResponse = await fetch('/api/auth/anonymous-id', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -64,7 +64,7 @@ export default function BlockchainAuditPage() {
 
           // Fetch audit trail using the correct anonymous_id
           const auditResponse = await fetch(
-            `http://localhost:8000/compliance/audit/${anonymousId}`,
+            `/api/compliance/audit/${anonymousId}`,
             {
               headers: {
                 'Authorization': `Bearer ${token}`
