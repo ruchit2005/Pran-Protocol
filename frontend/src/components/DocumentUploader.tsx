@@ -56,12 +56,26 @@ export default function DocumentUploader() {
       return;
     }
 
+    // Check file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    if (file.size > maxSize) {
+      setError(`File too large. Maximum size is 10MB (${(file.size / 1024 / 1024).toFixed(2)}MB provided)`);
+      return;
+    }
+
     setUploading(true);
     setError(null);
     setSuccess(null);
 
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Not authenticated. Please log in again.');
+        return;
+      }
+
+      console.log('Uploading file:', file.name, 'Size:', (file.size / 1024).toFixed(2), 'KB');
+      
       const formData = new FormData();
       formData.append('file', file);
 
@@ -71,8 +85,11 @@ export default function DocumentUploader() {
         body: formData
       });
 
+      console.log('Upload response status:', response.status);
+
       if (response.ok) {
         const result = await response.json();
+        console.log('Upload success:', result);
         
         let successMsg = `✅ ${file.name} uploaded successfully`;
         
@@ -87,9 +104,11 @@ export default function DocumentUploader() {
         await fetchDocuments();
       } else {
         const error = await response.json();
-        setError(error.detail || 'Upload failed');
+        console.error('Upload failed:', response.status, error);
+        setError(error.detail || `Upload failed (${response.status})`);
       }
     } catch (err) {
+      console.error('Upload error:', err);
       setError('Network error during upload');
     } finally {
       setUploading(false);

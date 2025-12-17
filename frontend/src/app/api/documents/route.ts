@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const API_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
+// Configure body size limit for this route
+export const runtime = 'nodejs';
+export const maxDuration = 60; // Maximum execution time in seconds
+
 // GET /api/documents - List user documents
 export async function GET(request: NextRequest) {
   try {
@@ -61,6 +65,16 @@ export async function POST(request: NextRequest) {
     }
     
     const formData = await request.formData();
+    const file = formData.get('file') as File;
+    
+    if (!file) {
+      return NextResponse.json(
+        { detail: 'No file provided' },
+        { status: 400 }
+      );
+    }
+
+    console.log('Proxying document upload:', file.name, file.size, 'bytes');
     
     const response = await fetch(`${API_URL}/documents/upload`, {
       method: 'POST',
@@ -74,6 +88,15 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Backend document upload error:', response.status, errorText);
+      
+      // Handle specific error cases
+      if (response.status === 401 || response.status === 403) {
+        return NextResponse.json(
+          { detail: 'Authentication failed. Please log in again.' },
+          { status: 401 }
+        );
+      }
+      
       try {
         const errorJson = JSON.parse(errorText);
         return NextResponse.json(errorJson, { status: response.status });
@@ -86,6 +109,7 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
+    console.log('Document upload successful:', data);
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
     console.error('Document upload proxy error:', error);
