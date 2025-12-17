@@ -399,19 +399,19 @@ class HealthcareWorkflow:
             if intent == 'ayush_support':
                 domain_names.append('Ayurveda')
                 retrieval_tasks.append(asyncio.to_thread(
-                    self.config.rag_retrievers['ayush'].get_relevant_documents, 
+                    self.config.rag_retrievers['ayush'].invoke, 
                     optimized_query
                 ))
             elif intent == 'yoga_support':
                 domain_names.append('Yoga')
                 retrieval_tasks.append(asyncio.to_thread(
-                    self.config.rag_retrievers['yoga'].get_relevant_documents, 
+                    self.config.rag_retrievers['yoga'].invoke, 
                     optimized_query
                 ))
             elif intent == 'government_scheme_support':
                 domain_names.append('Government Schemes')
                 retrieval_tasks.append(asyncio.to_thread(
-                    self.config.rag_retrievers['schemes'].get_relevant_documents, 
+                    self.config.rag_retrievers['schemes'].invoke, 
                     optimized_query
                 ))
         
