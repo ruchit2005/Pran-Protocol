@@ -43,7 +43,7 @@ class HealthcareWorkflow:
         self.profile_extractor = ProfileExtractionChain(config.llm_secondary)
         self.advisory_chain = HealthAdvisoryChain(config.llm_secondary)
         self.math_chain = MedicalMathChain(config.llm_secondary)
-        self.document_qa = DocumentQAChain(config.llm_secondary)
+        self.document_qa = DocumentQAChain(config.llm_document)
         self.conversational_symptom_checker = ConversationalSymptomChecker(config.llm_secondary)
         
         self.emergency_detector = HybridEmergencyDetector()

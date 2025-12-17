@@ -45,13 +45,29 @@ Provide a clear, helpful answer based on the document content above.""")
             Answer based on document content
         """
         try:
+            # Try with full timeout first
             response = self.chain.invoke({
                 "query": query,
                 "context": document_context
             })
             return response
+        except TimeoutError as e:
+            # Retry once with summarized context if timeout
+            try:
+                print(f"   ⚠️ Timeout on first attempt, retrying with summarized context...")
+                summarized_context = document_context[:3000] + "\n...[document truncated for faster processing]..."
+                response = self.chain.invoke({
+                    "query": query,
+                    "context": summarized_context
+                })
+                return response
+            except Exception as retry_error:
+                return f"I encountered a timeout analyzing your documents. Your document may be too long. Please try asking a more specific question about a particular section."
         except Exception as e:
-            return f"I encountered an error analyzing your documents: {str(e)}"
+            error_msg = str(e)
+            if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+                return f"The request timed out while analyzing your document. Please try again or ask a more specific question about a particular test or section."
+            return f"I encountered an error analyzing your documents: {error_msg}"
 
 
 class ConversationalSymptomChecker:

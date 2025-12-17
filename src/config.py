@@ -41,7 +41,7 @@ class HealthcareConfig:
             temperature=0.3,
             api_key=openai_api_key_1,
             max_tokens=1200,  # Increased for faster generation
-            request_timeout=20  # 20s timeout
+            request_timeout=30  # 30s timeout (increased for document processing)
         )
         print(f"   ✓ Primary LLM (Key 1) ready")
         
@@ -52,13 +52,23 @@ class HealthcareConfig:
                 temperature=0.3,
                 api_key=openai_api_key_2,
                 max_tokens=1200,  # Increased for faster generation
-                request_timeout=20  # 20s timeout
+                request_timeout=45  # 45s timeout for document analysis and specialized chains
             )
             print(f"   ✓ Secondary LLM (Key 2) ready")
         else:
             # Fallback to same key if only one provided
             self.llm_secondary = self.llm_primary
             print(f"   ⚠️ Only one API key provided, using same for both LLMs")
+        
+        # LLM 3: Document processing (longer timeout for large PDFs)
+        self.llm_document = ChatOpenAI(
+            model="gpt-4o-mini",
+            temperature=0.3,
+            api_key=openai_api_key_1,
+            max_tokens=1500,  # More tokens for detailed document analysis
+            request_timeout=60  # 60s timeout for processing large documents
+        )
+        print(f"   ✓ Document Processing LLM ready (60s timeout)")
         
         # Backwards compatibility
         self.llm = self.llm_primary
