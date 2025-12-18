@@ -940,6 +940,17 @@ async def chat(
 ):
     """Process chat message with MongoDB storage, user profile, and history context"""
     try:
+        # Debug: Log the raw request body (using print for visibility)
+        print(f"🔍 [RAW REQUEST] ChatRequest object:")
+        print(f"   - query: {request.query[:50]}...")
+        print(f"   - session_id: {request.session_id}")
+        print(f"   - generate_audio: {request.generate_audio}")
+        print(f"   - locale: {request.locale}")
+        print(f"   - latitude: {request.latitude}")
+        print(f"   - longitude: {request.longitude}")
+        print(f"   - latitude type: {type(request.latitude)}")
+        print(f"   - longitude type: {type(request.longitude)}")
+        
         user_id = current_user["_id"]
         user_salt = current_user["encryption_key_id"]
         
@@ -1127,14 +1138,37 @@ User Profile (Anonymized ID: {anonymous_id}):
         # Determine response language - be VERY specific to avoid Urdu confusion
         response_language = "Hindi (Devanagari script, not Urdu)" if request.locale == "hi" else "English"
         
+        # Debug logging for location
+        logger.info(f"🔍 [BACKEND STEP 1] Request received:")
+        logger.info(f"   - request.latitude: {request.latitude} (type: {type(request.latitude).__name__})")
+        logger.info(f"   - request.longitude: {request.longitude} (type: {type(request.longitude).__name__})")
+        logger.info(f"   - locale: {request.locale}")
+        
+        user_location_tuple = None
+        if request.latitude and request.longitude:
+            user_location_tuple = (request.latitude, request.longitude)
+            logger.info(f"✅ [BACKEND STEP 2] Created user_location tuple: {user_location_tuple}")
+        else:
+            logger.warning(f"⚠️ [BACKEND STEP 2] No location - latitude or longitude missing")
+        
+        logger.info(f"🚀 [BACKEND STEP 3] Calling workflow.run with user_location={user_location_tuple}")
+        
         result = await workflow.run(
             user_input=request.query,
             query_for_classification=full_context_query,  # Pass full context
             user_profile=user_profile_raw,  # Pass profile for potential updates
             conversation_history=history_context,  # Pass conversation history
-            user_location=(request.latitude, request.longitude) if request.latitude and request.longitude else None,
+            user_location=user_location_tuple,
             response_language=response_language  # Tell workflow what language to respond in
         )
+        
+        logger.info(f"📊 [BACKEND STEP 4] Workflow result keys: {list(result.keys())}")
+        logger.info(f"   - Has 'nearby_hospitals': {'nearby_hospitals' in result}")
+        if 'nearby_hospitals' in result:
+            logger.info(f"   - nearby_hospitals type: {type(result['nearby_hospitals'])}")
+            logger.info(f"   - nearby_hospitals length: {len(result['nearby_hospitals']) if result['nearby_hospitals'] else 0}")
+            if result['nearby_hospitals']:
+                logger.info(f"   - First hospital: {result['nearby_hospitals'][0]}")
         
         # Process response with DISHA compliance
         try:

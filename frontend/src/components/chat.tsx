@@ -492,6 +492,7 @@ export default function HealthcareChat() {
     try {
       // Get user's location for emergency services
       let userLocation: { latitude?: number; longitude?: number } = {};
+      console.log("🔍 [STEP 1] Attempting to get browser geolocation...");
       try {
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -503,31 +504,55 @@ export default function HealthcareChat() {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude
         };
+        console.log("✅ [STEP 1] Browser location captured:", {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          timestamp: new Date(position.timestamp).toISOString()
+        });
       } catch (geoError) {
-        console.log("📍 Location not available:", geoError);
+        console.error("❌ [STEP 1] Location error:", geoError);
+        console.log("   Error name:", (geoError as any).code);
+        console.log("   Error message:", (geoError as any).message);
         // Continue without location - non-blocking
       }
 
+      const requestBody = {
+        query: textToSend,
+        session_id: requestSessionId,
+        generate_audio: generateAudio,
+        locale: locale,  // Send user's language preference
+        ...userLocation  // Include lat/lon if available
+      };
+      console.log("📤 [STEP 2] Sending request to backend:", {
+        endpoint: '/api/chat',
+        hasLatitude: 'latitude' in requestBody,
+        hasLongitude: 'longitude' in requestBody,
+        latitude: requestBody.latitude,
+        longitude: requestBody.longitude,
+        locale: requestBody.locale
+      });
+      console.log("📝 [STEP 2.5] Request body object:", requestBody);
+      console.log("📝 [STEP 2.6] Stringified JSON:", JSON.stringify(requestBody, null, 2));
+      
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          query: textToSend,
-          session_id: requestSessionId,
-          generate_audio: generateAudio,
-          locale: locale,  // Send user's language preference
-          ...userLocation  // Include lat/lon if available
-        }),
+        body: JSON.stringify(requestBody),
         signal: abortController.signal,
       });
 
       if (!response.ok) throw new Error('Network response error');
 
       const data = await response.json();
-      console.log("📦 Full API Response:", data);
+      console.log("📦 [STEP 3] Full API Response:", data);
+      console.log("   - Has nearby_hospitals:", 'nearby_hospitals' in data);
+      console.log("   - nearby_hospitals value:", data.nearby_hospitals);
+      console.log("   - nearby_hospitals type:", typeof data.nearby_hospitals);
+      console.log("   - nearby_hospitals length:", Array.isArray(data.nearby_hospitals) ? data.nearby_hospitals.length : 'N/A');
       console.log("🔍 Checking emergency conditions:");
       console.log("  - data.intent:", data.intent);
       console.log("  - data.symptom_assessment:", data.symptom_assessment);

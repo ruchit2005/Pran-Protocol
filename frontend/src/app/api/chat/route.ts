@@ -7,7 +7,9 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    const { query, history, session_id } = await req.json();
+    // Extract ALL fields from request body
+    const body = await req.json();
+    const { query, history, session_id, generate_audio, latitude, longitude, locale } = body;
     const token = req.headers.get('authorization');
 
     const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
@@ -29,6 +31,10 @@ export async function POST(req: NextRequest) {
           query,
           session_id,
           history: history || [],
+          generate_audio,
+          latitude,
+          longitude,
+          locale
         }),
         signal: controller.signal,
       });

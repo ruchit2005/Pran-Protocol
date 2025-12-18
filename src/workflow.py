@@ -66,22 +66,199 @@ class HealthcareWorkflow:
         
         print("   ✓ All chains initialized with load-balanced API keys")
 
-    async def _fetch_nearby_hospitals(self, latitude: float, longitude: float, limit: int = 5) -> Optional[List[Dict]]:
-        """Fetch nearby hospitals from external API"""
+    async def _fetch_nearby_hospitals(self, latitude: float, longitude: float, limit: int = 5, emergency_context: str = "") -> Optional[List[Dict]]:
+        """Fetch nearby hospitals using OpenStreetMap Overpass API with contextual filtering"""
         try:
-            url = f"https://indian-hospital-locator.onrender.com/hospitals/nearby?latitude={latitude}&longitude={longitude}&limit={limit}"
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(url)
-                if response.status_code == 200:
-                    data = response.json()
-                    hospitals = data if isinstance(data, list) else data.get('hospitals', [])
-                    print(f"   ✓ Fetched {len(hospitals)} nearby hospitals")
-                    return hospitals
-                else:
-                    print(f"   ⚠️ Hospital API returned status {response.status_code}")
-                    return None
+            print(f"🏥 [OVERPASS API STEP 1] _fetch_nearby_hospitals called:")
+            print(f"   - latitude: {latitude} (type: {type(latitude).__name__})")
+            print(f"   - longitude: {longitude} (type: {type(longitude).__name__})")
+            print(f"   - limit: {limit}")
+            print(f"   - emergency_context: {emergency_context}")
+            
+            # Analyze emergency context to determine what to filter
+            context_lower = emergency_context.lower()
+            
+            # Define what to exclude based on emergency type
+            exclude_keywords = []
+            priority_keywords = []
+            
+            # For cardiac/heart emergencies: exclude everything except general hospitals
+            if any(word in context_lower for word in ['heart', 'cardiac', 'chest pain', 'stroke']):
+                exclude_keywords = ['eye', 'dental', 'skin', 'dermatology', 'ortho', 'gynae', 'ent', 'pediatric only']
+                priority_keywords = ['cardiac', 'heart', 'emergency', 'aiims', 'medical college', 'icu', 'critical care']
+                print(f"   🎯 Cardiac emergency detected - prioritizing hospitals with cardiac/emergency care")
+            
+            # For trauma/injury: prioritize trauma centers, exclude specialized clinics
+            elif any(word in context_lower for word in ['accident', 'fracture', 'injury', 'bleeding', 'trauma']):
+                exclude_keywords = ['eye', 'dental', 'skin', 'dermatology', 'ent']
+                priority_keywords = ['trauma', 'emergency', 'surgery', 'aiims', 'medical college', 'icu']
+                print(f"   🎯 Trauma emergency detected - prioritizing trauma centers")
+            
+            # For respiratory: prioritize hospitals with ICU/ventilators
+            elif any(word in context_lower for word in ['breathing', 'asthma', 'respiratory', 'breathless']):
+                exclude_keywords = ['eye', 'dental', 'skin', 'dermatology', 'ortho', 'gynae', 'ent']
+                priority_keywords = ['pulmonary', 'respiratory', 'icu', 'ventilator', 'emergency', 'aiims']
+                print(f"   🎯 Respiratory emergency detected - prioritizing hospitals with ICU")
+            
+            # For pregnancy/childbirth emergencies
+            elif any(word in context_lower for word in ['pregnancy', 'labor', 'delivery', 'childbirth', 'bleeding pregnant']):
+                exclude_keywords = ['eye', 'dental', 'skin', 'dermatology', 'ortho', 'ent']
+                priority_keywords = ['maternity', 'gynae', 'obstetric', 'women', 'emergency', 'nicu']
+                print(f"   🎯 Maternity emergency detected - prioritizing maternity hospitals")
+            
+            # Default: general emergency - exclude specialized clinics
+            else:
+                exclude_keywords = ['eye', 'dental', 'skin', 'dermatology', 'clinic']
+                priority_keywords = ['emergency', 'aiims', 'medical college', 'district', 'government']
+                print(f"   🎯 General emergency - excluding specialized clinics")
+            
+            # OpenStreetMap Overpass API - use multiple mirrors for reliability
+            radius = 5000  # 5km in meters
+            
+            # Simplified Overpass QL query - just nodes with amenity=hospital (faster)
+            query = f"""
+            [out:json][timeout:15];
+            node["amenity"="hospital"](around:{radius},{latitude},{longitude});
+            out body;
+            """
+            
+            # Multiple Overpass API endpoints (fallback mirrors)
+            api_endpoints = [
+                "https://overpass-api.de/api/interpreter",
+                "https://overpass.kumi.systems/api/interpreter",
+                "https://overpass.openstreetmap.ru/api/interpreter"
+            ]
+            
+            print(f"🌐 [OVERPASS API STEP 2] Calling OpenStreetMap Overpass API (hospitals only)")
+            
+            data = None
+            for endpoint_index, url in enumerate(api_endpoints):
+                try:
+                    print(f"   Trying endpoint {endpoint_index + 1}/{len(api_endpoints)}: {url.split('/')[2]}")
+                    async with httpx.AsyncClient(timeout=20.0) as client:
+                        response = await client.post(url, data={"data": query})
+                        print(f"📡 [OVERPASS API STEP 3] API Response:")
+                        print(f"   - Status code: {response.status_code}")
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            print(f"   ✅ Success with endpoint {endpoint_index + 1}")
+                            break
+                        else:
+                            print(f"   ⚠️ Endpoint {endpoint_index + 1} returned {response.status_code}, trying next...")
+                except Exception as e:
+                    print(f"   ⚠️ Endpoint {endpoint_index + 1} failed: {e}, trying next...")
+                    continue
+            
+            if not data:
+                print(f"❌ [OVERPASS API] All endpoints failed")
+                return None
+            
+            print(f"   - Response type: {type(data)}")
+                    
+            elements = data.get('elements', [])
+            print(f"📋 [OVERPASS API STEP 4] Extracted results:")
+            print(f"   - Count: {len(elements)}")
+            
+            hospitals = []
+            import math
+            
+            # Use dynamic keywords determined above
+            print(f"   🚫 Excluding: {', '.join(exclude_keywords)}")
+            print(f"   ⭐ Prioritizing: {', '.join(priority_keywords)}")
+            
+            for i, element in enumerate(elements):
+                # Get coordinates (nodes only now)
+                hospital_lat = element.get('lat')
+                hospital_lon = element.get('lon')
+                
+                if not hospital_lat or not hospital_lon:
+                    continue
+                
+                # Get hospital details
+                tags = element.get('tags', {})
+                name = tags.get('name', tags.get('operator', 'Unknown Hospital'))
+                
+                # CONTEXTUAL FILTERING: Skip specialized clinics for emergency
+                name_lower = name.lower()
+                if any(keyword in name_lower for keyword in exclude_keywords):
+                    print(f"   ⚠️ Skipping specialized clinic: {name}")
+                    continue
+                
+                # Build address
+                address_parts = []
+                if tags.get('addr:street'):
+                    address_parts.append(tags['addr:street'])
+                if tags.get('addr:city'):
+                    address_parts.append(tags['addr:city'])
+                elif tags.get('addr:district'):
+                    address_parts.append(tags['addr:district'])
+                if tags.get('addr:state'):
+                    address_parts.append(tags['addr:state'])
+                
+                address = ', '.join(address_parts) if address_parts else 'Address not available'
+                
+                # Calculate distance using Haversine formula
+                R = 6371  # Radius of Earth in km
+                lat1, lon1 = math.radians(latitude), math.radians(longitude)
+                lat2, lon2 = math.radians(hospital_lat), math.radians(hospital_lon)
+                dlat = lat2 - lat1
+                dlon = lon2 - lon1
+                a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+                distance = R * c
+                
+                # PRIORITY SCORING: Use context-aware keywords
+                priority = 0
+                
+                # Check against priority keywords from emergency context
+                for keyword in priority_keywords:
+                    if keyword in name_lower or keyword in tags.get('healthcare:speciality', '').lower():
+                        if keyword in ['aiims', 'medical college']:
+                            priority += 100
+                        elif keyword in ['emergency', 'trauma', 'cardiac', 'icu']:
+                            priority += 80
+                        elif keyword in ['government', 'district']:
+                            priority += 40
+                        else:
+                            priority += 20
+                
+                # Bonus for bed count (indicates larger hospital)
+                if tags.get('beds'):
+                    priority += 30
+                
+                print(f"   🏥 Hospital {i+1}: {name}")
+                print(f"      - Coordinates: ({hospital_lat}, {hospital_lon})")
+                print(f"      - Distance: {distance:.2f} km")
+                print(f"      - Priority score: {priority}")
+                
+                hospitals.append({
+                    'id': element.get('id', f'osm_{i}'),
+                    'hospital_name': name,
+                    'address': address,
+                    'latitude': hospital_lat,
+                    'longitude': hospital_lon,
+                    'distance_km': round(distance, 2),
+                    'priority': priority,
+                    'type': 'hospital'
+                })
+            
+            # Sort by priority first, then distance
+            hospitals.sort(key=lambda h: (-h.get('priority', 0), h.get('distance_km', 999999)))
+            hospitals = hospitals[:limit]
+            
+            print(f"✅ [OVERPASS API STEP 5] Sorted and limited to {len(hospitals)} hospitals")
+            if hospitals:
+                print(f"   - Top result: {hospitals[0].get('hospital_name')} ({hospitals[0].get('distance_km')} km, priority: {hospitals[0].get('priority')})")
+                if len(hospitals) > 1:
+                    print(f"   - Last result: {hospitals[-1].get('hospital_name')} ({hospitals[-1].get('distance_km')} km)")
+            
+            return hospitals
+            
         except Exception as e:
-            print(f"   ⚠️ Failed to fetch hospitals: {e}")
+            print(f"❌ [OVERPASS API] Exception: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def _format_hospitals_for_emergency(self, hospitals: List[Dict]) -> str:
@@ -109,8 +286,17 @@ class HealthcareWorkflow:
         query_optimization_cache = {}
         
         # Store location and language for emergency use
+        print(f"🔍 [WORKFLOW STEP 1] run() called with:")
+        print(f"   - user_location parameter: {user_location}")
+        print(f"   - user_location type: {type(user_location)}")
+        print(f"   - response_language: {response_language}")
+        
         self._user_location = user_location
         self._response_language = response_language
+        
+        print(f"✅ [WORKFLOW STEP 2] Stored in self:")
+        print(f"   - self._user_location: {self._user_location}")
+        print(f"   - self._response_language: {self._response_language}")
             
         # Step 0: Profile Extraction (Background)
         profile_update = None
@@ -745,7 +931,12 @@ Provide a comprehensive response that integrates relevant information from all s
             hospitals = None
             if hasattr(self, '_user_location') and self._user_location:
                 latitude, longitude = self._user_location
-                hospitals = await self._fetch_nearby_hospitals(latitude, longitude)
+                print(f"   📍 User location available: ({latitude}, {longitude})")
+                print(f"   🎯 Emergency context: {reason}")
+                # Pass emergency context for smart filtering
+                hospitals = await self._fetch_nearby_hospitals(latitude, longitude, emergency_context=reason)
+            else:
+                print(f"   ⚠️ User location not available (hasattr: {hasattr(self, '_user_location')}, value: {getattr(self, '_user_location', 'NOT SET')})")
             
             # Format hospital list
             if hospitals:
@@ -759,9 +950,6 @@ Provide a comprehensive response that integrates relevant information from all s
 Reason: {reason or "Critical symptoms detected"}
 
 **Call Emergency Services (108/112)**
-
-### 🏥 Nearby Emergency Facilities
-{hospital_list}
 """
             result["intent"] = "emergency"  # Set intent for frontend detection
         else:
