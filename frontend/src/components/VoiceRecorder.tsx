@@ -7,9 +7,10 @@ import { useTranslations } from 'next-intl';
 type Props = {
   onTranscribed: (text: string, language?: string) => void;
   onError?: (err: string) => void;
+  onProcessingChange?: (isProcessing: boolean) => void;
 };
 
-export default function VoiceRecorder({ onTranscribed, onError }: Props) {
+export default function VoiceRecorder({ onTranscribed, onError, onProcessingChange }: Props) {
   const [recording, setRecording] = useState(false);
   const t = useTranslations('Chat');
   const mediaRef = useRef<MediaRecorder | null>(null);
@@ -27,6 +28,7 @@ export default function VoiceRecorder({ onTranscribed, onError }: Props) {
       };
 
       mr.onstop = async () => {
+        onProcessingChange?.(true); // Start processing indicator
         try {
           const blob = new Blob(chunksRef.current, { type: mediaRef.current?.mimeType || "audio/webm" });
           const fd = new FormData();
@@ -49,6 +51,7 @@ export default function VoiceRecorder({ onTranscribed, onError }: Props) {
             }
             const txt = await res.text();
             onError?.(`Upload error: ${res.status} ${txt}`);
+            onProcessingChange?.(false);
             return;
           }
 
@@ -68,6 +71,8 @@ export default function VoiceRecorder({ onTranscribed, onError }: Props) {
           } else {
             onError?.("Upload failed");
           }
+        } finally {
+          onProcessingChange?.(false); // End processing indicator
         }
       };
 

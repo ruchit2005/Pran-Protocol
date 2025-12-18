@@ -154,6 +154,7 @@ const formatResponse = (response: ChatResponse, t: any): React.ReactNode => {
 
 export default function HealthcareChat() {
   const router = useRouter();
+  const locale = useLocale(); // Get current locale (en or hi)
 
   // State
   const [messages, setMessages] = useState<Message[]>([]);
@@ -174,13 +175,13 @@ export default function HealthcareChat() {
   const tNav = useTranslations('Navigation');
   const tHead = useTranslations('Header');
   const tAlerts = useTranslations('Alerts');
-  const locale = useLocale(); // Get current locale (en or hi)
 
   // File Upload State
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLocating, setIsLocating] = useState(false); // Emergency Locator State
+  const [isProcessingAudio, setIsProcessingAudio] = useState(false); // STT processing state
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Desktop default open
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -517,6 +518,7 @@ export default function HealthcareChat() {
           query: textToSend,
           session_id: requestSessionId,
           generate_audio: generateAudio,
+          locale: locale,  // Send user's language preference
           ...userLocation  // Include lat/lon if available
         }),
         signal: abortController.signal,
@@ -1301,6 +1303,7 @@ export default function HealthcareChat() {
               <VoiceRecorder
                 onTranscribed={(text) => handleSubmit(text, true)}
                 onError={console.error}
+                onProcessingChange={setIsProcessingAudio}
               />
 
               <button
@@ -1316,12 +1319,22 @@ export default function HealthcareChat() {
 
               <button
                 onClick={() => handleSubmit()}
-                disabled={isLoading || !input.trim()}
+                disabled={isLoading || !input.trim() || isProcessingAudio}
                 className="p-4 bg-[#3A5A40] hover:bg-[#2F4A33] text-white rounded-full transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:shadow-none hover:-translate-y-1 active:translate-y-0"
               >
                 {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
               </button>
             </div>
+            
+            {/* Audio Processing Indicator */}
+            {isProcessingAudio && (
+              <div className="px-4 pb-2">
+                <div className="flex items-center gap-2 text-sm text-stone-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Processing audio...</span>
+                </div>
+              </div>
+            )}
           </div>
           <p className="text-center text-[11px] text-stone-400 mt-3 font-medium">
             {t('disclaimer')}

@@ -927,6 +927,7 @@ class ChatRequest(BaseModel):
     generate_audio: Optional[bool] = False
     latitude: Optional[float] = None  # User's location for emergency services
     longitude: Optional[float] = None
+    locale: Optional[str] = "en"  # User's language preference (en or hi)
 
 # Return the full workflow result as a dict instead of structured response
 # Frontend expects: {intent, output, yoga_recommendations, yoga_videos, etc.}
@@ -1123,12 +1124,16 @@ User Profile (Anonymized ID: {anonymous_id}):
                 logger.warning(f"Blockchain logging failed: {e}")
         
         # Process with healthcare workflow WITH CONTEXT
+        # Determine response language - be VERY specific to avoid Urdu confusion
+        response_language = "Hindi (Devanagari script, not Urdu)" if request.locale == "hi" else "English"
+        
         result = await workflow.run(
             user_input=request.query,
             query_for_classification=full_context_query,  # Pass full context
             user_profile=user_profile_raw,  # Pass profile for potential updates
             conversation_history=history_context,  # Pass conversation history
-            user_location=(request.latitude, request.longitude) if request.latitude and request.longitude else None
+            user_location=(request.latitude, request.longitude) if request.latitude and request.longitude else None,
+            response_language=response_language  # Tell workflow what language to respond in
         )
         
         # Process response with DISHA compliance

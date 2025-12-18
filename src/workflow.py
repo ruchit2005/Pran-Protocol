@@ -102,14 +102,15 @@ class HealthcareWorkflow:
 
 
 
-    async def run(self, user_input: str, query_for_classification: str, user_profile: Any = None, conversation_history: str = "", user_location: Optional[tuple] = None) -> Dict[str, Any]:
+    async def run(self, user_input: str, query_for_classification: str, user_profile: Any = None, conversation_history: str = "", user_location: Optional[tuple] = None, response_language: str = "English") -> Dict[str, Any]:
         """Execute the workflow with conversational context"""
         
         # Create request-local cache to avoid concurrency issues
         query_optimization_cache = {}
         
-        # Store location for emergency use
+        # Store location and language for emergency use
         self._user_location = user_location
+        self._response_language = response_language
             
         # Step 0: Profile Extraction (Background)
         profile_update = None
@@ -364,9 +365,11 @@ class HealthcareWorkflow:
                 result.update(await self._handle_symptoms(user_input, user_profile, None))
             else:
                 # 1. Use conversational symptom checker
+                response_lang = getattr(self, '_response_language', 'English')
                 symptom_check_result = self.conversational_symptom_checker.run(
                     query=user_input,
-                    conversation_history=conversation_history
+                    conversation_history=conversation_history,
+                    response_language=response_lang
                 )
             
                 if symptom_check_result["needs_followup"]:
@@ -783,11 +786,18 @@ Reason: {reason or "Critical symptoms detected"}
             # Run agents in PARALLEL for faster response
             print("      → Running RAG retrieval in parallel (Ayurveda, Yoga, Mental Wellness)...")
             
+            # Add VERY specific language instruction to avoid Urdu confusion
+            response_lang = getattr(self, '_response_language', 'English')
+            if "Hindi" in response_lang:
+                lang_instruction = "\n\nCRITICAL: You MUST respond in Hindi using Devanagari script (देवनागरी). DO NOT use Urdu or Arabic script (ا، ب، پ). Use Hindi characters like: क, ख, ग, घ, च, छ, ज, झ, etc."
+            else:
+                lang_instruction = ""
+            
             async def get_all_recommendations():
                 tasks = [
-                    asyncio.to_thread(self.ayush_chain.run, f"Provide ayurvedic remedies for: {symptom_text}"),
-                    asyncio.to_thread(self.yoga_chain.run, f"Suggest yoga for: {symptom_text}"),
-                    asyncio.to_thread(self.mental_wellness_chain.run, f"Provide wellness advice for: {symptom_text}")
+                    asyncio.to_thread(self.ayush_chain.run, f"Provide ayurvedic remedies for: {symptom_text}{lang_instruction}"),
+                    asyncio.to_thread(self.yoga_chain.run, f"Suggest yoga for: {symptom_text}{lang_instruction}"),
+                    asyncio.to_thread(self.mental_wellness_chain.run, f"Provide wellness advice for: {symptom_text}{lang_instruction}")
                 ]
                 return await asyncio.gather(*tasks)
             

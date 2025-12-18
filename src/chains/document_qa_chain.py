@@ -79,6 +79,11 @@ class ConversationalSymptomChecker:
         self.assessment_prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a medical assistant conducting a symptom assessment. 
 
+CRITICAL LANGUAGE RULE:
+- If the user writes in Hindi (Devanagari: क, ख, ग), you MUST respond in Hindi Devanagari script
+- NEVER use Urdu or Arabic script (ا، ب، پ، ت، ک)
+- If you see Hindi input, respond with Hindi characters: क, ख, ग, घ, च, छ, ज, झ, ट, ठ, ड, ढ, ण, त, थ, द, ध, न, प, फ, ब, भ, म
+
 YOUR GOAL: Gather enough information to provide accurate recommendations.
 
 CONVERSATION FLOW:
@@ -118,9 +123,14 @@ Respond naturally. Either ask a follow-up question OR mark as ASSESSMENT_COMPLET
         
         self.chain = self.assessment_prompt | self.llm | StrOutputParser()
     
-    def run(self, query: str, conversation_history: str = "") -> Dict[str, Any]:
+    def run(self, query: str, conversation_history: str = "", response_language: str = "English") -> Dict[str, Any]:
         """
         Process symptom with conversational follow-ups
+        
+        Args:
+            query: User's message
+            conversation_history: Previous conversation
+            response_language: Language to respond in (English or Hindi)
         
         Returns:
             {
@@ -136,24 +146,31 @@ Respond naturally. Either ask a follow-up question OR mark as ASSESSMENT_COMPLET
             # Force completion after 2 questions
             if question_count >= 2:
                 # Extract symptoms from the conversation and complete
+                completion_msg = "आपने जो साझा किया है उसके आधार पर, मुझे आपके लिए सर्वोत्तम सिफारिशें खोजने दें..." if "Hindi" in response_language else "Based on what you've shared, let me find the best recommendations for you..."
                 return {
                     "needs_followup": False,
-                    "response": "Based on what you've shared, let me find the best recommendations for you...",
+                    "response": completion_msg,
                     "symptoms": [query],  # Use latest user input
                     "complete": True
                 }
             
+            # Add VERY specific language instruction to avoid Urdu confusion
+            language_instruction = ""
+            if "Hindi" in response_language:
+                language_instruction = "\n\nIMPORTANT: You MUST respond in Hindi using Devanagari script (not Urdu, not Arabic script). Use characters like क, ख, ग, not ک، خ، گ."
+            
             response = self.chain.invoke({
-                "query": query,
+                "query": query + language_instruction,
                 "conversation_history": conversation_history or "New conversation"
             })
             
             # Check if assessment is complete
             if "ASSESSMENT_COMPLETE:" in response:
                 symptoms_text = response.split("ASSESSMENT_COMPLETE:")[1].strip()
+                completion_msg = "आपने जो साझा किया है उसके आधार पर, मुझे आपके लिए सर्वोत्तम सिफारिशें खोजने दें..." if "Hindi" in response_language else "Based on what you've shared, let me find the best recommendations for you..."
                 return {
                     "needs_followup": False,
-                    "response": "Based on what you've shared, let me find the best recommendations for you...",
+                    "response": completion_msg,
                     "symptoms": [symptoms_text],
                     "complete": True
                 }
