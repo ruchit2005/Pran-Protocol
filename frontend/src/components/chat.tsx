@@ -660,9 +660,9 @@ export default function HealthcareChat() {
         // Handle various response structures
         let hospitals = Array.isArray(data) ? data : (data.hospitals || []);
 
-        // Calculate distance for each hospital if not provided
+        // ALWAYS recalculate distance using Haversine formula for accuracy
         hospitals = hospitals.map((hospital: any) => {
-          if (!hospital.distance_km && hospital.latitude && hospital.longitude) {
+          if (hospital.latitude && hospital.longitude) {
             // Haversine formula to calculate distance
             const R = 6371; // Radius of the Earth in km
             const dLat = (hospital.latitude - latitude) * Math.PI / 180;
@@ -675,6 +675,7 @@ export default function HealthcareChat() {
             const distance = R * c;
             return { ...hospital, distance_km: distance };
           }
+          // Keep existing distance_km if coordinates not available
           return hospital;
         });
 
