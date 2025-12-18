@@ -819,12 +819,13 @@ async def text_to_speech(request: TTSRequest, current_user: dict = Depends(get_c
         
         for i, chunk in enumerate(chunks):
             logger.info(f"  • Processing chunk {i+1}/{len(chunks)} ({len(chunk)} chars): {chunk[:30]}...")
+            logger.info(f"  • Language: {request.language_code}")
             try:
                 response = client.text_to_speech.convert(
                     text=chunk,
                     target_language_code=request.language_code,
                     speaker="anushka",
-                    pace=0.90,              # Slow and steady
+                    pace=0.9,              # Slow and steady
                     pitch=-0.2,             # Slightly lower for softer tone
                     loudness=1.0,           # Balanced loudness
                     speech_sample_rate=24000, # Premium 24kHz quality

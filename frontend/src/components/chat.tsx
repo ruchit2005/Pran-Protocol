@@ -13,7 +13,7 @@ import DocumentUploader from "./DocumentUploader";
 import { getValidToken, setupTokenRefresh, onAuthChange } from "@/lib/firebase-client";
 import HealthAlertsWidget from "./HealthAlertsWidget";
 import OnboardingModal from "./onboarding/OnboardingModal";
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import LanguageSwitcher from './LanguageSwitcher';
 
 // --- Types ---
@@ -174,6 +174,7 @@ export default function HealthcareChat() {
   const tNav = useTranslations('Navigation');
   const tHead = useTranslations('Header');
   const tAlerts = useTranslations('Alerts');
+  const locale = useLocale(); // Get current locale (en or hi)
 
   // File Upload State
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -802,7 +803,10 @@ export default function HealthcareChat() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({ 
+          text,
+          language_code: locale === 'hi' ? 'hi-IN' : 'en-IN' // Map locale to Sarvam language codes
+        })
       });
 
       if (res.ok) {
