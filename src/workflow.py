@@ -470,7 +470,7 @@ class HealthcareWorkflow:
             # Build context from final documents
             if final_docs:
                 combined_context = "\n\n---\n\n".join([
-                    f"[Source: {doc.metadata.get('source', 'Unknown')}]\n{doc.page_content}" 
+                    f"[Source: {doc.get('metadata', {}).get('source', 'Unknown') if isinstance(doc, dict) else doc.metadata.get('source', 'Unknown')}]\n{doc.get('content', '') if isinstance(doc, dict) else doc.page_content}" 
                     for doc in final_docs
                 ])
                 

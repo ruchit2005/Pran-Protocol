@@ -1128,17 +1128,25 @@ User Profile (Anonymized ID: {anonymous_id}):
         )
         
         # Process response with DISHA compliance
-        compliant_response = await compliance_manager.process_ai_response(
-            anonymous_id=anonymous_id,
-            user_query=request.query,
-            ai_response=result
-        )
-        
-        # Log blockchain transaction for medical advice
-        if compliant_response['blockchain_audit']:
-            blockchain_tx = compliant_response['blockchain_audit'].get('blockchain_tx')
-            if blockchain_tx:
-                logger.info(f"⛓️ Medical advice logged to blockchain: {blockchain_tx}")
+        try:
+            compliant_response = await compliance_manager.process_ai_response(
+                anonymous_id=anonymous_id,
+                user_query=request.query,
+                ai_response=result
+            )
+            
+            # Log blockchain transaction for medical advice
+            if compliant_response['blockchain_audit']:
+                blockchain_tx = compliant_response['blockchain_audit'].get('blockchain_tx')
+                if blockchain_tx:
+                    logger.info(f"⛓️ Medical advice logged to blockchain: {blockchain_tx}")
+        except Exception as compliance_error:
+            logger.error(f"Compliance processing failed: {compliance_error}")
+            # Create minimal compliant response to continue
+            compliant_response = {
+                'blockchain_audit': None,
+                'response': {}
+            }
         
         # Check if workflow updated the profile
         if result.get("profile_updated"):
@@ -1261,7 +1269,7 @@ User Profile (Anonymized ID: {anonymous_id}):
         )
         
         # Return full workflow result with DISHA compliance metadata
-        return {
+        response_data = {
             **result,
             "session_id": str(session_id),
             "timestamp": datetime.utcnow().isoformat(),
@@ -1276,6 +1284,9 @@ User Profile (Anonymized ID: {anonymous_id}):
                 "public_key_fingerprint": compliant_response['response'].get('public_key_fingerprint')
             }
         }
+        
+        logger.info(f"✅ Sending response for session {session_id}: {len(str(response_data))} chars")
+        return response_data
         
     except HTTPException:
         raise
