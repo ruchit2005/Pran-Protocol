@@ -489,6 +489,24 @@ export default function HealthcareChat() {
     }
 
     try {
+      // Get user's location for emergency services
+      let userLocation: { latitude?: number; longitude?: number } = {};
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            timeout: 5000,
+            maximumAge: 60000 // Cache for 1 minute
+          });
+        });
+        userLocation = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        };
+      } catch (geoError) {
+        console.log("📍 Location not available:", geoError);
+        // Continue without location - non-blocking
+      }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -499,6 +517,7 @@ export default function HealthcareChat() {
           query: textToSend,
           session_id: requestSessionId,
           generate_audio: generateAudio,
+          ...userLocation  // Include lat/lon if available
         }),
         signal: abortController.signal,
       });
@@ -543,16 +562,24 @@ export default function HealthcareChat() {
         audio.play().catch(console.error);
       }
 
-      // Check for emergency intent and trigger locator automatically
+      // Check for emergency intent and display hospitals from backend
       const isEmergency =
         data.intent === 'emergency' ||
         (data.symptom_assessment && data.symptom_assessment.is_emergency === true) ||
         (data.output && typeof data.output === 'object' && data.output.emergency);
 
       if (isEmergency) {
-        console.log("🚨 Emergency detected! Triggering hospital locator...");
-        // Find nearest hospitals automatically
-        setTimeout(() => handleEmergencyLocator('auto'), 500);
+        console.log("🚨 Emergency detected!");
+        
+        // If backend provided hospitals, display them
+        if (data.nearby_hospitals && Array.isArray(data.nearby_hospitals)) {
+          console.log(`✅ Backend provided ${data.nearby_hospitals.length} nearby hospitals`);
+          displayHospitals(data.nearby_hospitals);
+        } else {
+          console.log("⚠️ No hospitals in response, triggering manual locator");
+          // Fallback: manually trigger hospital locator
+          setTimeout(() => handleEmergencyLocator('auto'), 500);
+        }
       }
 
     } catch (error: any) {
@@ -627,6 +654,68 @@ export default function HealthcareChat() {
     } catch (err) {
       console.error("Error updating profile:", err);
     }
+  };
+
+  // --- Hospital Display Function ---
+  const displayHospitals = (hospitals: any[]) => {
+    if (!hospitals || hospitals.length === 0) {
+      console.log("No hospitals to display");
+      return;
+    }
+
+    const HospitalList = (
+      <div className="space-y-4 w-full">
+        <h3 className="text-xl font-serif font-bold text-red-600 flex items-center gap-2 border-b border-red-100 pb-2">
+          <Activity className="w-6 h-6 animate-pulse" />
+          Emergency Centers Nearby
+        </h3>
+        <div className="grid gap-3">
+          {hospitals.map((hospital: any, i: number) => (
+            <div key={i} className="bg-white p-4 rounded-xl border border-red-100 shadow-sm hover:shadow-md transition-all group">
+              <div className="flex justify-between items-start gap-2">
+                <div>
+                  <h4 className="font-bold text-stone-800 text-lg group-hover:text-red-700 transition-colors">{hospital.hospital_name || hospital.name || "Hospital"}</h4>
+                  <p className="text-sm text-stone-600 mt-1 flex items-start gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400" />
+                    {hospital.address_original || hospital.vicinity || hospital.address || "Address not available"}
+                  </p>
+                </div>
+                {hospital.distance_km ? (
+                  <div className="bg-amber-50 text-amber-700 text-xs font-bold px-2 py-1 rounded-full shrink-0">
+                    {hospital.distance_km.toFixed(1)} km
+                  </div>
+                ) : hospital.rating ? (
+                  <div className="bg-green-50 text-green-700 text-xs font-bold px-2 py-1 rounded-full shrink-0">
+                    {hospital.rating} ★
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex gap-3 mt-4 text-sm font-medium">
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent((hospital.hospital_name || "") + ", " + (hospital.address_original || hospital.address || ""))}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm"
+                >
+                  <MapPin className="w-4 h-4" />
+                  Get Directions
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-stone-500 mt-2 italic">
+          * Please verify availability before visiting. In critical emergencies, call 112 directly.
+        </p>
+      </div>
+    );
+
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: HospitalList,
+      rawContent: JSON.stringify(hospitals)
+    }]);
   };
 
   // --- Emergency Locator ---

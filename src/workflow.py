@@ -2,7 +2,8 @@
 Main healthcare workflow with multi-agent orchestration
 """
 import asyncio
-from typing import Dict, Any, List
+import httpx
+from typing import Dict, Any, List, Optional
 from .config import HealthcareConfig
 from .chains import (
     GuardrailAndIntentChain,
@@ -65,13 +66,50 @@ class HealthcareWorkflow:
         
         print("   ✓ All chains initialized with load-balanced API keys")
 
+    async def _fetch_nearby_hospitals(self, latitude: float, longitude: float, limit: int = 5) -> Optional[List[Dict]]:
+        """Fetch nearby hospitals from external API"""
+        try:
+            url = f"https://indian-hospital-locator.onrender.com/hospitals/nearby?latitude={latitude}&longitude={longitude}&limit={limit}"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+                    hospitals = data if isinstance(data, list) else data.get('hospitals', [])
+                    print(f"   ✓ Fetched {len(hospitals)} nearby hospitals")
+                    return hospitals
+                else:
+                    print(f"   ⚠️ Hospital API returned status {response.status_code}")
+                    return None
+        except Exception as e:
+            print(f"   ⚠️ Failed to fetch hospitals: {e}")
+            return None
+
+    def _format_hospitals_for_emergency(self, hospitals: List[Dict]) -> str:
+        """Format hospital list for emergency response"""
+        if not hospitals:
+            return "Unable to fetch hospital locations. Please call 108/112 for emergency services."
+        
+        formatted = []
+        for i, h in enumerate(hospitals[:5], 1):  # Top 5 hospitals
+            name = h.get('hospital_name') or h.get('name', 'Unknown Hospital')
+            address = h.get('address_original') or h.get('address') or h.get('vicinity', 'Address not available')
+            distance = h.get('distance_km')
+            
+            dist_text = f" ({distance:.1f} km)" if distance else ""
+            formatted.append(f"{i}. **{name}**{dist_text}\n   📍 {address}")
+        
+        return "\n\n".join(formatted)
 
 
-    async def run(self, user_input: str, query_for_classification: str, user_profile: Any = None, conversation_history: str = "") -> Dict[str, Any]:
+
+    async def run(self, user_input: str, query_for_classification: str, user_profile: Any = None, conversation_history: str = "", user_location: Optional[tuple] = None) -> Dict[str, Any]:
         """Execute the workflow with conversational context"""
         
         # Create request-local cache to avoid concurrency issues
         query_optimization_cache = {}
+        
+        # Store location for emergency use
+        self._user_location = user_location
             
         # Step 0: Profile Extraction (Background)
         profile_update = None
@@ -698,8 +736,20 @@ Provide a comprehensive response that integrates relevant information from all s
             result = {"symptom_assessment": {"is_emergency": True, "symptoms": [reason], "severity": 10}}
 
         if is_emergency:
-            hospital_query = f"Find nearest emergency hospitals for: {user_input}"
-            hospital_list = self.hospital_chain.run(hospital_query)
+            print(f"🚨 Emergency detected - fetching nearby hospitals...")
+            
+            # Try to fetch hospitals from API if location available
+            hospitals = None
+            if hasattr(self, '_user_location') and self._user_location:
+                latitude, longitude = self._user_location
+                hospitals = await self._fetch_nearby_hospitals(latitude, longitude)
+            
+            # Format hospital list
+            if hospitals:
+                hospital_list = self._format_hospitals_for_emergency(hospitals)
+                result["nearby_hospitals"] = hospitals  # Include raw data for frontend
+            else:
+                hospital_list = "Location not available. Please enable location services or call 108/112 for emergency assistance."
             
             result["output"] = f"""# ⚠️ URGENT MEDICAL OBSERVATION
 **Immediate attention recommended.**
@@ -710,6 +760,7 @@ Reason: {reason or "Critical symptoms detected"}
 ### 🏥 Nearby Emergency Facilities
 {hospital_list}
 """
+            result["intent"] = "emergency"  # Set intent for frontend detection
         else:
             # Use conversational summary if available, otherwise extract from symptom_data
             if conversational_result and conversational_result.get("complete"):

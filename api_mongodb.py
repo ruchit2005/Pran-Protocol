@@ -925,6 +925,8 @@ class ChatRequest(BaseModel):
     query: str  # Changed from 'message' to match frontend
     session_id: Optional[str] = None  # Changed to str for ObjectId compatibility
     generate_audio: Optional[bool] = False
+    latitude: Optional[float] = None  # User's location for emergency services
+    longitude: Optional[float] = None
 
 # Return the full workflow result as a dict instead of structured response
 # Frontend expects: {intent, output, yoga_recommendations, yoga_videos, etc.}
@@ -1125,7 +1127,8 @@ User Profile (Anonymized ID: {anonymous_id}):
             user_input=request.query,
             query_for_classification=full_context_query,  # Pass full context
             user_profile=user_profile_raw,  # Pass profile for potential updates
-            conversation_history=history_context  # Pass conversation history
+            conversation_history=history_context,  # Pass conversation history
+            user_location=(request.latitude, request.longitude) if request.latitude and request.longitude else None
         )
         
         # Process response with DISHA compliance
