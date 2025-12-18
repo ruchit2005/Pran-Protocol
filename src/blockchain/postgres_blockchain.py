@@ -228,30 +228,30 @@ class PostgresBlockchain:
         try:
             conn = self._get_connection()
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        cursor.execute('''
-            SELECT a.*, b.block_hash, b.previous_hash, b.nonce
-            FROM audit_logs a
-            JOIN blocks b ON a.block_number = b.block_number
-            WHERE a.anonymous_id = %s
-            ORDER BY a.timestamp DESC
-        ''', (anonymous_id,))
-        
-        results = cursor.fetchall()
-        
-        # Convert to list of dicts and parse JSON fields
-        records = []
-        for row in results:
-            record = dict(row)
-            record['timestamp'] = record['timestamp'].isoformat() if record.get('timestamp') else None
-            # Parse metadata from JSON string to dict
-            if record.get('metadata'):
-                try:
-                    record['metadata'] = json.loads(record['metadata'])
-                except:
-                    record['metadata'] = {}
-            records.append(record)
-        
+            
+            cursor.execute('''
+                SELECT a.*, b.block_hash, b.previous_hash, b.nonce
+                FROM audit_logs a
+                JOIN blocks b ON a.block_number = b.block_number
+                WHERE a.anonymous_id = %s
+                ORDER BY a.timestamp DESC
+            ''', (anonymous_id,))
+            
+            results = cursor.fetchall()
+            
+            # Convert to list of dicts and parse JSON fields
+            records = []
+            for row in results:
+                record = dict(row)
+                record['timestamp'] = record['timestamp'].isoformat() if record.get('timestamp') else None
+                # Parse metadata from JSON string to dict
+                if record.get('metadata'):
+                    try:
+                        record['metadata'] = json.loads(record['metadata'])
+                    except:
+                        record['metadata'] = {}
+                records.append(record)
+            
             cursor.close()
             conn.close()
             return records
@@ -267,55 +267,55 @@ class PostgresBlockchain:
         try:
             conn = self._get_connection()
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
+            
             cursor.execute('SELECT * FROM blocks ORDER BY block_number ASC')
             blocks = cursor.fetchall()
-        
-        # Empty blockchain is considered valid
-        if len(blocks) == 0:
-            cursor.close()
-            conn.close()
-            logger.info("✅ Empty blockchain - valid")
-            return True
-        
-        # Single block (genesis) is valid
-        if len(blocks) == 1:
-            cursor.close()
-            conn.close()
-            logger.info("✅ Genesis block only - valid")
-            return True
-        
-        for i in range(1, len(blocks)):
-            current = blocks[i]
-            previous = blocks[i-1]
             
-            # Verify previous hash links
-            if current['previous_hash'] != previous['block_hash']:
-                logger.error(f"❌ Chain broken at block {current['block_number']}")
+            # Empty blockchain is considered valid
+            if len(blocks) == 0:
                 cursor.close()
                 conn.close()
-                return False
+                logger.info("✅ Empty blockchain - valid")
+                return True
             
-            # Verify block hash - convert timestamp properly
-            timestamp_str = current['timestamp'].isoformat() if hasattr(current['timestamp'], 'isoformat') else str(current['timestamp'])
-            
-            calculated_hash = self._calculate_hash(
-                current['block_number'],
-                timestamp_str,
-                current['previous_hash'],
-                current['data'],
-                current['nonce']
-            )
-            
-            if calculated_hash != current['block_hash']:
-                logger.error(f"❌ Block {current['block_number']} hash mismatch")
-                logger.error(f"   Expected: {current['block_hash']}")
-                logger.error(f"   Calculated: {calculated_hash}")
-                logger.error(f"   Timestamp: {timestamp_str}")
+            # Single block (genesis) is valid
+            if len(blocks) == 1:
                 cursor.close()
                 conn.close()
-                return False
-        
+                logger.info("✅ Genesis block only - valid")
+                return True
+            
+            for i in range(1, len(blocks)):
+                current = blocks[i]
+                previous = blocks[i-1]
+                
+                # Verify previous hash links
+                if current['previous_hash'] != previous['block_hash']:
+                    logger.error(f"❌ Chain broken at block {current['block_number']}")
+                    cursor.close()
+                    conn.close()
+                    return False
+                
+                # Verify block hash - convert timestamp properly
+                timestamp_str = current['timestamp'].isoformat() if hasattr(current['timestamp'], 'isoformat') else str(current['timestamp'])
+                
+                calculated_hash = self._calculate_hash(
+                    current['block_number'],
+                    timestamp_str,
+                    current['previous_hash'],
+                    current['data'],
+                    current['nonce']
+                )
+                
+                if calculated_hash != current['block_hash']:
+                    logger.error(f"❌ Block {current['block_number']} hash mismatch")
+                    logger.error(f"   Expected: {current['block_hash']}")
+                    logger.error(f"   Calculated: {calculated_hash}")
+                    logger.error(f"   Timestamp: {timestamp_str}")
+                    cursor.close()
+                    conn.close()
+                    return False
+            
             cursor.close()
             conn.close()
             logger.info("✅ Blockchain integrity verified")
