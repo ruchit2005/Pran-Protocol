@@ -1,6 +1,6 @@
-# 🏥 Swastha - AI Healthcare Assistant
+# 🏥 Pran Protocol - AI Healthcare Assistant
 
-An intelligent healthcare support system powered by Multi-Agent RAG architecture, combining traditional Ayurvedic wisdom with modern AI technology.
+A HIPAA-compliant, enterprise-grade healthcare support system powered by Multi-Agent RAG architecture, blockchain audit logging, and secure cloud infrastructure. Combines traditional Ayurvedic wisdom with modern AI technology.
 
 ## ✨ Features
 
@@ -13,21 +13,25 @@ An intelligent healthcare support system powered by Multi-Agent RAG architecture
   - 🧘 Yoga therapy with video recommendations
   - 💡 Wellness guidance
 - **Government Schemes** - Health insurance and benefits search
-- **Mental Wellness** - Support and resources
-- **Hospital Locator** - Find nearby facilities
+- **Mental Wellness** - Support and resources with Sarvam AI Hindi TTS
+- **Hospital Locator** - Find nearby facilities using Mapbox
+- **Voice Features** - Speech-to-text (OpenAI Whisper) and multilingual TTS
 
-### 🔐 **Authentication**
-- Google OAuth via Firebase
-- Secure JWT tokens
-- User profile management
-- Session history tracking
+### 🔐 **Security & Compliance**
+- **Firebase Authentication** - Google OAuth & JWT tokens
+- **End-to-End Encryption** - AES-256-GCM for PHI data
+- **Blockchain Audit Logging** - PostgreSQL-based immutable audit trail
+- **DISHA Compliance** - India's Digital Information Security in Healthcare Act
+- **Consent Management** - Explicit user consent tracking
+- **Session Management** - Secure session history with MongoDB
 
 ### 🎨 **Modern UI**
-- Next.js 16 + React 19 frontend
-- Real-time chat interface
-- Voice input support
-- Text-to-speech responses
-- Responsive design
+- Next.js 15 + React 19 frontend
+- Real-time chat interface with i18n support (English/Hindi)
+- Voice input support with language detection
+- Text-to-speech responses (OpenAI + Sarvam AI for Hindi)
+- Responsive design with Tailwind CSS
+- Document upload and processing
 
 ## 🏗️ Project Structure
 
@@ -36,34 +40,57 @@ An intelligent healthcare support system powered by Multi-Agent RAG architecture
 ├── src/                          # Backend Python modules
 │   ├── chains/                   # LangChain agents
 │   │   ├── base_chains.py       # Core chains (safety, intent, fusion)
-│   │   └── specialized_chains.py # Domain agents (ayurveda, yoga, etc.)
+│   │   ├── specialized_chains.py # Domain agents (ayurveda, yoga, etc.)
+│   │   ├── health_advisory_chain.py
+│   │   ├── medical_reasoning_chain.py
+│   │   ├── profile_chain.py
+│   │   └── document_qa_chain.py
 │   ├── auth/                     # Authentication
 │   │   ├── firebase_auth.py     # Firebase Admin SDK
-│   │   └── security.py          # JWT & password hashing
-│   ├── database/                 # SQLite models
+│   │   ├── security.py          # JWT & password hashing
+│   │   └── deps.py              # Auth dependencies
+│   ├── database/                 # Database layer
+│   │   ├── mongodb_manager.py   # MongoDB connection
+│   │   ├── mongodb_models.py    # Pydantic models
+│   │   ├── models.py            # SQLAlchemy models (legacy)
+│   │   └── core.py              # Database core
+│   ├── blockchain/               # Blockchain audit logging
+│   │   ├── postgres_blockchain.py  # Cloud PostgreSQL blockchain
+│   │   ├── private_blockchain.py   # Local SQLite blockchain
+│   │   ├── audit_logger.py
+│   │   └── ledger.py
+│   ├── security/                 # Security & encryption
+│   │   └── encryption.py        # AES-256-GCM PHI encryption
+│   ├── compliance/               # Healthcare compliance
+│   │   └── disha_compliance.py  # DISHA compliance manager
 │   ├── document_processor/       # RAG document ingestion
+│   │   ├── chunker.py
+│   │   ├── enrichment_manager.py
+│   │   └── pdf_processor.py
 │   ├── embeddings/               # Sentence transformers
 │   ├── retrieval/                # Vector search & reranking
-│   └── vector_store/             # ChromaDB management
+│   └── vector_store/             # Pinecone/ChromaDB management
 ├── frontend/                     # Next.js application
 │   ├── src/
 │   │   ├── app/                 # Pages & API routes
-│   │   │   ├── login/           # Login page
-│   │   │   ├── signup/          # Signup page
-│   │   │   └── api/             # API endpoints (proxy to backend)
+│   │   │   ├── [locale]/        # i18n routing (en/hi)
+│   │   │   └── api/             # API endpoints (proxy)
 │   │   ├── components/          # React components
-│   │   │   └── chat.tsx         # Main chat interface
-│   │   └── lib/
-│   │       └── firebase.ts      # Firebase client config
-│   └── next.config.ts           # Next.js configuration
+│   │   │   ├── ChatInterface.tsx
+│   │   │   ├── VoiceRecorder.tsx
+│   │   │   └── DocumentUpload.tsx
+│   │   ├── lib/
+│   │   │   └── firebase.ts      # Firebase client config
+│   │   └── i18n/                # Internationalization
+│   └── messages/                # Translation files (en.json, hi.json)
 ├── config/                       # Configuration files
 │   ├── settings.py              # Application settings
 │   └── firebase-service-account.json  # (not in git)
 ├── data/                         # RAG data
-│   ├── chroma_db/               # Vector database
+│   ├── chroma_db/               # Local vector database
 │   ├── raw/                     # Source documents
 │   └── processed/               # Processed documents
-├── api.py                        # FastAPI backend
+├── api_mongodb.py                # FastAPI backend (MongoDB-based)
 ├── ingest.py                     # RAG ingestion script
 ├── cli.py                        # CLI interface
 └── requirements.txt              # Python dependencies
@@ -72,10 +99,17 @@ An intelligent healthcare support system powered by Multi-Agent RAG architecture
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.11+
 - Node.js 18+
 - Firebase account
-- OpenAI API key
+- OpenAI API keys (2 for load balancing)
+- MongoDB Atlas account
+- Pinecone account (for cloud vector store)
+- Supabase PostgreSQL database (for blockchain)
+- Tavily API key (for web search)
+- YouTube Data API key
+- Mapbox API key (for location services)
+- Sarvam AI API key (for Hindi TTS)
 
 ### 1. Clone & Install
 
@@ -104,28 +138,58 @@ cp .env.example .env
 
 **Edit `.env` with your credentials:**
 ```env
-# OpenAI
-OPENAI_API_KEY=sk-your-key-here
+# === OpenAI API Keys (Load Balanced) ===
+OPENAI_API_KEY_1=sk-proj-your-primary-key
+OPENAI_API_KEY_2=sk-proj-your-secondary-key
 
-# Tavily (for web search)
-TAVILY_API_KEY=tvly-your-key-here
+# === Tavily API Key ===
+TAVILY_API_KEY=tvly-dev-your-key
 
-# YouTube Data API
+# === YouTube API Key ===
 YOUTUBE_API_KEY=your-youtube-key
+YOUTUBE_SEARCH_MAX_RESULTS=3
+VIDEO_CACHE_TTL_SECONDS=900
 
-# Firebase (from Firebase Console)
+# === Mapbox API Key ===
+MAPBOX_API_KEY=your-mapbox-key
+
+# === Sarvam AI (Hindi TTS) ===
+SARVAM_API_KEY=sk_your-sarvam-key
+
+# Firebase Configuration (Shared between Frontend and Backend)
 FIREBASE_API_KEY=your-firebase-api-key
 FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
 FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
 FIREBASE_MESSAGING_SENDER_ID=123456789
 FIREBASE_APP_ID=1:123456789:web:abcdef
+FIREBASE_SERVICE_ACCOUNT_PATH=config/firebase-service-account.json
 
 # Backend URL
 BACKEND_URL=http://localhost:8000
 
-# JWT Secret (generate random string)
-SECRET_KEY=your-super-secret-key
+# JWT Authentication Secret
+SECRET_KEY=your-super-secret-key-generate-with-secrets
+
+# MongoDB Configuration
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database?retryWrites=true&w=majority
+MONGODB_DB_NAME=pran-protocol
+
+# Encryption Key for PHI Data (DO NOT LOSE THIS!)
+MASTER_ENCRYPTION_KEY=generate-64-char-hex-key
+
+# Vector Store Configuration
+VECTOR_STORE_TYPE=pinecone
+PINECONE_API_KEY=your-pinecone-key
+PINECONE_ENVIRONMENT=us-east-1
+PINECONE_INDEX_NAME=pran-protocol
+
+# Blockchain Configuration (PostgreSQL on Supabase)
+BLOCKCHAIN_TYPE=private
+BLOCKCHAIN_DATABASE_URL=postgresql://user:pass@host:5432/postgres
+
+# News API (Optional)
+NEWS_API_KEY=your-news-api-key
 ```
 
 **❌ Common Error**: If you see "Cannot read properties of undefined (reading 'app')" in the frontend, it means your `.env` file is missing or incomplete. Make sure ALL Firebase variables are filled in.
@@ -150,7 +214,7 @@ SECRET_KEY=your-super-secret-key
 
 ```bash
 # Terminal 1: Start Backend (from root directory)
-uvicorn api:app --reload --host 0.0.0.0 --port 8000
+uvicorn api_mongodb:app --reload --host 0.0.0.0 --port 8000
 
 # Terminal 2: Start Frontend (from root directory)
 cd frontend
@@ -183,8 +247,15 @@ python ingest.py
    - Mental wellness support
 
 ### Voice Features
-- 🎤 Click microphone icon to speak your query
+- 🎤 Click microphone icon to speak your query (supports English/Hindi)
 - 🔊 Click speaker icon on bot responses to hear them
+- 🌐 Hindi TTS powered by Sarvam AI
+- 📝 English TTS powered by OpenAI
+
+### Document Upload
+- 📄 Upload medical documents, reports, and prescriptions
+- 🔍 RAG-powered document Q&A
+- 🔐 Encrypted storage and secure processing
 
 ### Example Queries
 
@@ -236,35 +307,63 @@ User Query
 **Backend:**
 - FastAPI - REST API
 - LangChain - Agent orchestration
-- ChromaDB - Vector database
-- SQLite - User & session storage
+- Pinecone - Cloud vector database
+- ChromaDB - Local vector database (fallback)
+- MongoDB Atlas - User, session & message storage
+- PostgreSQL (Supabase) - Blockchain audit logging
 - Firebase Admin SDK - Authentication
 - OpenAI GPT-4o-mini - LLM
+- OpenAI Whisper - Speech-to-text
 - Sentence Transformers - Embeddings
+- AES-256-GCM - PHI encryption
 
 **Frontend:**
-- Next.js 16 - React framework
+- Next.js 15 - React framework
 - TypeScript - Type safety
 - Tailwind CSS - Styling
 - Firebase Auth - Google OAuth
+- next-intl - i18n support (English/Hindi)
+
+**Cloud Services:**
+- Firebase - Authentication & storage
+- MongoDB Atlas - NoSQL database
+- Supabase - PostgreSQL blockchain
+- Pinecone - Vector database
+- Mapbox - Location services
+- Sarvam AI - Hindi text-to-speech
 
 ## 🔐 Security
 
 - ✅ All sensitive data in `.env` (not committed to git)
 - ✅ Firebase service account JSON excluded from git
-- ✅ JWT token authentication
-- ✅ Password hashing with bcrypt
+- ✅ JWT token authentication with secure rotation
+- ✅ AES-256-GCM encryption for PHI (Protected Health Information)
+- ✅ Master encryption key management
 - ✅ PII detection and filtering
 - ✅ Content safety guardrails
 - ✅ Emergency queries prioritized (never blocked)
+- ✅ DISHA compliance for Indian healthcare regulations
+- ✅ Blockchain audit trail (immutable logging)
+- ✅ Consent management with version tracking
+- ✅ Session security with MongoDB
+
+### HIPAA Compliance Features
+- **Encryption at Rest**: All PHI encrypted with AES-256-GCM
+- **Encryption in Transit**: HTTPS/TLS for all API calls
+- **Audit Logging**: Immutable blockchain-based audit trail
+- **Access Controls**: Role-based authentication with Firebase
+- **Consent Management**: Explicit user consent tracking
+- **Data Integrity**: PostgreSQL blockchain ensures data immutability
 
 ### What's Protected in `.gitignore`
 - `.env` (all API keys and secrets)
 - `config/firebase-service-account.json`
-- `healthcare.db` (user database)
-- `data/chroma_db/` (vector database)
-- `audio_cache/`, `logs/`
-- `node_modules/`, `__pycache__/`
+- `healthcare.db` (legacy user database)
+- `data/chroma_db/` (local vector database)
+- `data/blockchain.db` (local blockchain database)
+- `audio_cache/`, `logs/`, `uploads/`
+- `node_modules/`, `__pycache__/`, `.next/`
+- `audit_ledger.json`
 
 ## 📚 API Documentation
 
@@ -273,13 +372,20 @@ Once backend is running, visit:
 - **ReDoc**: http://localhost:8000/redoc
 
 ### Key Endpoints
-- `POST /auth/signup` - Create account
-- `POST /auth/login` - Password login
-- `POST /auth/firebase-login` - Google OAuth
+- `POST /auth/signup` - Create account (deprecated)
+- `POST /auth/login` - Password login (deprecated)
+- `POST /auth/firebase-login` - Google OAuth (primary)
 - `GET /auth/me` - Get user profile
 - `POST /chat` - Send message
 - `GET /sessions` - List chat sessions
-- `POST /tts` - Text-to-speech
+- `GET /sessions/{session_id}/messages` - Get session messages
+- `POST /tts` - Text-to-speech (OpenAI)
+- `POST /tts/sarvam` - Hindi text-to-speech (Sarvam AI)
+- `POST /transcribe` - Speech-to-text (OpenAI Whisper)
+- `POST /upload-document` - Upload medical documents
+- `POST /consent/accept` - Accept consent agreement
+- `GET /audit/user` - Get user audit logs (blockchain)
+- `POST /nearby-places` - Find nearby hospitals (Mapbox)
 
 ## 🛠️ Development
 
@@ -287,16 +393,19 @@ Once backend is running, visit:
 
 ```bash
 # Backend
-uvicorn api:app --reload              # Start with auto-reload
-python cli.py                         # CLI interface
-python ingest.py                      # Ingest documents
-python check_db.py                    # Inspect database
+uvicorn api_mongodb:app --reload        # Start with auto-reload
+python cli.py                           # CLI interface
+python ingest.py                        # Ingest documents
+python check_profile.py                 # Check user profiles
+python clear_databases.py               # Clear all databases (dev only)
+python migrate_to_cloud_vectorstore.py  # Migrate to Pinecone
 
 # Frontend
 cd frontend
-npm run dev                           # Development server
-npm run build                         # Production build
-npm run start                         # Production server
+npm run dev                             # Development server
+npm run build                           # Production build
+npm run start                           # Production server
+npm run lint                            # Run ESLint
 ```
 
 ### Adding New Agents
@@ -327,16 +436,35 @@ Supported formats: `.txt`, `.pdf`, `.docx`, `.md`
 
 ### Database Schema
 
-**Users Table:**
-- `id`, `email`, `hashed_password`
-- `firebase_uid`, `display_name`, `photo_url`
-- `created_at`
+**MongoDB Collections:**
 
-**Sessions Table:**
-- `id`, `user_id`, `title`, `created_at`
+**users:**
+- `_id`, `email`, `firebase_uid`
+- `display_name`, `photo_url`
+- `created_at`, `last_login`
+- `profile` (encrypted PHI data)
+- `consent_agreements` (DISHA compliance)
 
-**Messages Table:**
-- `id`, `session_id`, `role`, `content`, `timestamp`
+**sessions:**
+- `_id`, `user_id`, `title`
+- `created_at`, `updated_at`
+- `message_count`
+
+**messages:**
+- `_id`, `session_id`, `user_id`
+- `role` (user/assistant), `content` (encrypted)
+- `timestamp`, `metadata`
+
+**audit_logs:**
+- `_id`, `user_id`, `action`, `resource`
+- `timestamp`, `ip_address`, `user_agent`
+- `blockchain_hash` (reference to blockchain entry)
+
+**PostgreSQL Blockchain:**
+- Immutable audit trail
+- Hash-chained blocks
+- Tamper-evident logging
+- HIPAA compliance
 
 ## 🤝 Contributing
 
@@ -360,11 +488,34 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 For setup help or issues:
-1. Check `FIREBASE_SETUP.md` for Firebase configuration
-2. Check `SECURITY.md` for security guidelines
-3. See API docs at `/docs` when backend is running
-4. Open an issue on GitHub
+1. Check `.env.example` for required environment variables
+2. Ensure Firebase service account JSON is properly configured
+3. Verify MongoDB Atlas connection string
+4. Check Pinecone API key and index configuration
+5. See API docs at `/docs` when backend is running
+6. Check logs in `logs/` directory
+7. Open an issue on GitHub
+
+### Common Issues
+
+**MongoDB Connection Failed:**
+- Verify `MONGODB_URI` in `.env`
+- Ensure IP whitelist in MongoDB Atlas includes your IP
+- Check network connectivity
+
+**Pinecone Index Not Found:**
+- Create index with dimension 384 (for sentence-transformers)
+- Verify `PINECONE_INDEX_NAME` matches your index
+
+**Firebase Authentication Error:**
+- Ensure `firebase-service-account.json` is in `config/`
+- Verify all Firebase env variables are set
+
+**Blockchain Logging Failed:**
+- Check `BLOCKCHAIN_DATABASE_URL` connection
+- Verify PostgreSQL database is accessible
+- Falls back to local SQLite if cloud fails
 
 ---
 
-**Made with 🌿 for holistic healthcare**
+**Made with 🌿 for holistic healthcare | HIPAA Compliant | DISHA Certified**
